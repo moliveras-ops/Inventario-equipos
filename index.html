@@ -1,1 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b3d6b">
+<title>Inventario Equipos</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{--azul:#0b3d6b;--azul2:#155a9c;--gris:#f2f4f7;--borde:#d0d5dd;--txt:#1d2939;--ok:#12813b;--baja:#b42318;--cal:#b54708}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--gris);color:var(--txt)}
+  header{background:var(--azul);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+  header img{height:38px;background:#fff;border-radius:6px;padding:3px}
+  header h1{font-size:1.05rem;margin:0;flex:1}
+  header button{padding:8px 10px}
+  main{max-width:900px;margin:0 auto;padding:12px 16px 90px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--borde);border-radius:8px;font-size:1rem;background:#fff}
+  input[readonly]{background:var(--gris)}
+  .bar input{flex:2;min-width:160px}.bar select{flex:1;min-width:120px}
+  button{border:0;border-radius:8px;padding:10px 14px;font-size:.95rem;cursor:pointer;background:var(--azul2);color:#fff}
+  button.sec{background:#fff;color:var(--azul);border:1px solid var(--azul2)}
+  button.del{background:var(--baja)}
+  .stats{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .stats div{background:#fff;border-radius:8px;padding:8px 12px;font-size:.85rem;border:1px solid var(--borde)}
+  .card{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:10px;display:flex;gap:10px;margin-bottom:8px;cursor:pointer}
+  .card img,.card .ph{width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--gris);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.6rem}
+  .card .info{flex:1;min-width:0}
+  .card b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card small{color:#667085}
+  .tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:10px;color:#fff;margin-top:4px}
+  .Operativo{background:var(--ok)}.baja{background:var(--baja)}.cal{background:var(--cal)}
+  .fab{position:fixed;right:18px;bottom:18px;width:58px;height:58px;border-radius:50%;font-size:2rem;box-shadow:0 4px 12px #0004}
+  dialog{border:0;border-radius:12px;padding:0;width:min(600px,96vw);max-height:92vh}
+  dialog::backdrop{background:#0006}
+  .dlg{padding:16px;overflow:auto;max-height:92vh}
+  .dlg h2{margin:0 0 12px;font-size:1.1rem}
+  .dlg h3{font-size:.95rem;margin:16px 0 6px;color:var(--azul)}
+  label{display:block;font-size:.8rem;color:#475467;margin:8px 0 3px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;justify-content:flex-end}
+  #prevFoto{max-width:100%;max-height:220px;border-radius:8px;margin-top:6px;display:none}
+  #qrBox{display:flex;justify-content:center;padding:10px}
+  .det td{padding:4px 6px;border-bottom:1px solid var(--gris);vertical-align:top}.det td:first-child{color:#667085;width:40%}
+  .catrow{display:flex;gap:8px;align-items:center;margin-bottom:6px}.catrow span{flex:1}
+  .venc{color:var(--baja);font-weight:600}
+  .hint{font-size:.72rem;color:#667085;margin-top:2px}
+  .gbar{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:.85rem}
+  .gbar span:first-child{width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gbar .b{flex:1;background:var(--gris);border-radius:4px;height:18px;position:relative}
+  .gbar .b i{display:block;height:100%;background:var(--azul2);border-radius:4px}
+  .gbar b{width:30px;text-align:right}
+  @media(max-width:520px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <img src="logo-iqs.png" alt="IQS" onerror="this.style.display='none'">
+  <h1>Inventario Equipos</h1>
+  <button class="sec" onclick="abrirGraficos()" title="Gráficos">📈</button>
+  <button class="sec" onclick="abrirCats()" title="Categorías">🗂️</button>
+  <button class="sec" onclick="abrirMenu()" title="Menú">☰</button>
+</header>
 
+<main>
+  <div class="bar">
+    <input id="q" placeholder="Buscar serie, marca, modelo…" oninput="render()">
+    <select id="fCat" onchange="render()"></select>
+    <select id="fEst" onchange="render()"></select>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div id="lista"></div>
+</main>
+
+<button class="fab" onclick="editar()">+</button>
+
+<!-- Formulario equipo -->
+<dialog id="dForm"><form class="dlg" onsubmit="guardar(event)">
+  <h2 id="fTit">Nuevo equipo</h2>
+  <div class="grid2">
+    <div><label>Categoría *</label><select id="e_cat" required onchange="toggleTransductor()"></select></div>
+    <div><label>N° de serie * (identificador)</label><input id="e_serie" required></div>
+    <div><label>Marca</label><input id="e_marca" placeholder="Olympus, GE…"></div>
+    <div><label>Modelo</label><input id="e_modelo" placeholder="38DL Plus, D790…"></div>
+    <div><label>Estado</label><select id="e_est"></select></div>
+    <div><label>Ubicación / responsable</label><input id="e_ubic" placeholder="Bodega Concepción…"></div>
+  </div>
+  <div class="grid2" id="bloqueTrans">
+    <div><label>Frecuencia (MHz)</label><select id="e_frec"></select></div>
+    <div><label>Diámetro (mm)</label><select id="e_diam"></select></div>
+  </div>
+  <h3>Calibración</h3>
+  <div class="grid2">
+    <div><label>Última calibración</label><input id="e_fcal" type="date" onchange="calcProx()"></div>
+    <div><label>Próxima calibración</label><input id="e_fprox" type="date" readonly><div class="hint">Automática: +6 meses</div></div>
+    <div><label>Responsable de calibración</label><input id="e_rcal" placeholder="Laboratorio / técnico"></div>
+    <div><label>N° certificado</label><input id="e_cert"></div>
+  </div>
+  <label>Equipo asociado</label><input id="e_asoc" placeholder="Ej.: serie del medidor al que pertenece">
+  <label>Observaciones</label><textarea id="e_obs" rows="2"></textarea>
+  <label>Foto</label>
+  <input type="file" id="e_foto" accept="image/*" capture="environment" onchange="cargarFoto(this)">
+  <img id="prevFoto" alt="">
+  <div class="acts">
+    <button type="button" class="del" id="btnDel" onclick="eliminar()">Eliminar</button>
+    <button type="button" class="sec" onclick="dForm.close()">Cancelar</button>
+    <button type="submit">Guardar</button>
+  </div>
+</form></dialog>
+
+<!-- Detalle -->
+<dialog id="dDet"><div class="dlg">
+  <h2 id="dTit"></h2>
+  <img id="dFoto" style="max-width:100%;max-height:240px;border-radius:8px;display:none">
+  <table class="det" id="dTabla" style="width:100%;border-collapse:collapse;margin-top:8px"></table>
+  <div id="qrBox"></div>
+  <div class="acts">
+    <button class="sec" onclick="descargarQR()">Descargar QR</button>
+    <button class="sec" onclick="etiquetasPDF([actualEq()])">Etiqueta 1"</button>
+    <button class="sec" onclick="fichaPDF()">Ficha PDF</button>
+    <button class="sec" onclick="editar(actual)">Editar</button>
+    <button onclick="dDet.close()">Cerrar</button>
+  </div>
+</div></dialog>
+
+<!-- Menú -->
+<dialog id="dMenu"><div class="dlg">
+  <h2>Opciones</h2>
+  <div style="display:grid;gap:8px">
+    <button onclick="exportarExcel()">📊 Exportar Excel</button>
+    <button onclick="exportarPDF()">📄 Informe PDF (listado)</button>
+    <button onclick="etiquetasPDF()">🏷️ Etiquetas QR 1"×1" (PDF)</button>
+    <button class="sec" onclick="abrirGraficos()">📈 Gráficos de existencia</button>
+    <button class="sec" onclick="abrirCats()">🗂️ Administrar categorías</button>
+    <button class="sec" onclick="respaldo()">💾 Descargar respaldo (JSON)</button>
+    <button class="sec" onclick="document.getElementById('impJson').click()">⤴️ Restaurar respaldo</button>
+    <input type="file" id="impJson" accept=".json" hidden onchange="restaurar(this)">
+    <button class="sec" onclick="dMenu.close()">Cerrar</button>
+  </div>
+</div></dialog>
+
+<!-- Categorías -->
+<dialog id="dCats"><div class="dlg">
+  <h2>Categorías</h2>
+  <div id="catLista"></div>
+  <div class="catrow"><input id="nuevaCat" placeholder="Nueva categoría"><button onclick="agregarCat()">Agregar</button></div>
+  <div class="acts"><button onclick="dCats.close()">Listo</button></div>
+</div></dialog>
+
+<!-- Gráficos -->
+<dialog id="dGraf"><div class="dlg">
+  <h2>Existencia de equipos</h2>
+  <div class="grid2">
+    <div><label>Categoría</label><select id="gCat" onchange="pintarGraficos()"></select></div>
+    <div><label>Estado</label><select id="gEst" onchange="pintarGraficos()"></select></div>
+    <div><label>Marca</label><select id="gMarca" onchange="pintarGraficos(true)"></select></div>
+    <div><label>Modelo</label><select id="gModelo" onchange="pintarGraficos()"></select></div>
+  </div>
+  <div id="graficos"></div>
+  <div class="acts"><button onclick="dGraf.close()">Cerrar</button></div>
+</div></dialog>
+
+<script>
+const ESTADOS = ["Operativo","En calibración","En reparación","Dado de baja"];
+const CATS_DEF = ["Medidor de espesor","Transductor","Yugo magnético"];
+const FRECS = ["5","7","7.5","10"];
+const DIAMS = ["4","6","8","10"];
+const MESES_CAL = 6;
+const ICONOS = {"Medidor de espesor":"📟","Transductor":"🔘","Yugo magnético":"🧲"};
+let equipos = [], cats = [], actual = null, fotoTmp = null;
+
+/* ---------- IndexedDB ---------- */
+let db;
+function abrirDB(){return new Promise((ok,err)=>{
+  const r=indexedDB.open("inventarioIQS",1);
+  r.onupgradeneeded=e=>{const d=e.target.result;d.createObjectStore("equipos",{keyPath:"id"});d.createObjectStore("config")};
+  r.onsuccess=e=>{db=e.target.result;ok()};r.onerror=err;
+})}
+const tx=(s,m="readonly")=>db.transaction(s,m).objectStore(s);
+const req=r=>new Promise((ok,err)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>err(r.error)});
+const dbAll=()=>req(tx("equipos").getAll());
+const dbPut=e=>req(tx("equipos","readwrite").put(e));
+const dbDel=id=>req(tx("equipos","readwrite").delete(id));
+const cfgGet=k=>req(tx("config").get(k));
+const cfgSet=(k,v)=>req(tx("config","readwrite").put(v,k));
+
+/* ---------- Inicio ---------- */
+(async()=>{
+  await abrirDB();
+  cats = (await cfgGet("cats")) || CATS_DEF.slice();
+  equipos = await dbAll();
+  // Migración de versión anterior: si no había serie, usar el código interno
+  for(const e of equipos){ if(!e.serie && e.cod){ e.serie=e.cod; await dbPut(e); } }
+  llenarSelects(); render();
+  const m = location.hash.match(/eq=([^&]+)/);
+  if(m) ver(decodeURIComponent(m[1]));
+  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+})();
+window.addEventListener("hashchange",()=>{const m=location.hash.match(/eq=([^&]+)/);if(m)ver(decodeURIComponent(m[1]))});
+
+const opts=(arr,todos)=>(todos?`<option value="">${todos}</option>`:"")+arr.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+function llenarSelects(){
+  fCat.innerHTML=opts(cats,"Todas las categorías");
+  e_cat.innerHTML=opts(cats);
+  fEst.innerHTML=opts(ESTADOS,"Todos los estados");
+  e_est.innerHTML=opts(ESTADOS);
+  e_frec.innerHTML='<option value="">—</option>'+FRECS.map(v=>`<option value="${v}">${v.replace(".",",")} MHz</option>`).join("");
+  e_diam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
+}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hoy=()=>new Date().toISOString().slice(0,10);
+const fmt=d=>d?d.split("-").reverse().join("-"):"";
+const txtFrec=e=>e.frec?e.frec.replace(".",",")+" MHz":"";
+const txtDiam=e=>e.diam?e.diam+" mm":"";
+const vencido=e=>e.fprox && e.fprox<hoy() && e.est!=="Dado de baja";
+const claseEst=s=>s==="Operativo"?"Operativo":s==="Dado de baja"?"baja":"cal";
+const actualEq=()=>equipos.find(x=>x.id===actual);
+
+function sumarMeses(f,m){
+  const [a,mm,d]=f.split("-").map(Number);
+  const dt=new Date(Date.UTC(a,mm-1+m,1));
+  const ult=new Date(Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth()+1,0)).getUTCDate();
+  dt.setUTCDate(Math.min(d,ult));
+  return dt.toISOString().slice(0,10);
+}
+function calcProx(){ e_fprox.value = e_fcal.value ? sumarMeses(e_fcal.value,MESES_CAL) : ""; }
+function toggleTransductor(){
+  const t=/transductor/i.test(e_cat.value);
+  bloqueTrans.style.display=t?"":"none";
+  if(!t){e_frec.value="";e_diam.value="";}
+}
+
+/* ---------- Listado ---------- */
+function filtrados(){
+  const q=document.getElementById("q").value.toLowerCase().trim();
+  return equipos.filter(e=>(!fCat.value||e.cat===fCat.value)&&(!fEst.value||e.est===fEst.value)&&
+    (!q||[e.serie,e.marca,e.modelo,e.ubic,e.rcal,txtFrec(e),txtDiam(e)].join(" ").toLowerCase().includes(q)))
+    .sort((a,b)=>(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
+}
+function render(){
+  const l=filtrados();
+  const cnt=s=>equipos.filter(e=>e.est===s).length;
+  stats.innerHTML=`<div>Total: <b>${equipos.length}</b></div><div>Operativos: <b>${cnt("Operativo")}</b></div>
+    <div>De baja: <b>${cnt("Dado de baja")}</b></div><div>Calibración vencida: <b class="venc">${equipos.filter(vencido).length}</b></div>`;
+  lista.innerHTML=l.length?l.map(e=>`<div class="card" onclick="ver('${e.id}')">
+    ${e.foto?`<img src="${e.foto}">`:`<div class="ph">${ICONOS[e.cat]||"🔧"}</div>`}
+    <div class="info"><b>S/N ${esc(e.serie)} · ${esc(e.marca)} ${esc(e.modelo)}</b>
+    <small>${esc(e.cat)}${e.frec||e.diam?" · "+[txtFrec(e),txtDiam(e)].filter(Boolean).join(" / "):""}${e.fprox?` · Próx. cal.: <span class="${vencido(e)?"venc":""}">${fmt(e.fprox)}</span>`:""}</small><br>
+    <span class="tag ${claseEst(e.est)}">${e.est}</span></div></div>`).join("")
+    :'<p style="text-align:center;color:#667085;margin-top:40px">Sin equipos. Toca + para agregar.</p>';
+}
+
+/* ---------- Formulario ---------- */
+const CAMPOS=["cat","serie","marca","modelo","est","ubic","frec","diam","fcal","fprox","rcal","cert","asoc","obs"];
+function editar(id){
+  dDet.open&&dDet.close();
+  const e=equipos.find(x=>x.id===id)||{};
+  fTit.textContent=e.id?"Editar equipo":"Nuevo equipo";
+  CAMPOS.forEach(c=>document.getElementById("e_"+c).value=e[c]||"");
+  if(!e.id){e_est.value="Operativo";e_cat.value=fCat.value||cats[0]}
+  toggleTransductor();
+  if(e.frec)e_frec.value=e.frec; if(e.diam)e_diam.value=e.diam;
+  fotoTmp=e.foto||null; prevFoto.src=fotoTmp||""; prevFoto.style.display=fotoTmp?"block":"none";
+  e_foto.value=""; btnDel.style.display=e.id?"":"none";
+  actual=e.id||null; dForm.showModal();
+}
+function cargarFoto(inp){
+  const f=inp.files[0]; if(!f)return;
+  const img=new Image(); img.onload=()=>{
+    const k=Math.min(1,900/Math.max(img.width,img.height)),c=document.createElement("canvas");
+    c.width=img.width*k;c.height=img.height*k;c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    fotoTmp=c.toDataURL("image/jpeg",0.75);prevFoto.src=fotoTmp;prevFoto.style.display="block";URL.revokeObjectURL(img.src);
+  }; img.src=URL.createObjectURL(f);
+}
+async function guardar(ev){
+  ev.preventDefault();
+  calcProx();
+  const e={id:actual||crypto.randomUUID(),foto:fotoTmp,act:new Date().toISOString()};
+  CAMPOS.forEach(c=>e[c]=document.getElementById("e_"+c).value.trim());
+  if(equipos.some(x=>(x.serie||"").toLowerCase()===e.serie.toLowerCase()&&x.id!==e.id))
+    return alert("Ya existe un equipo con ese número de serie.");
+  await dbPut(e); equipos=await dbAll(); dForm.close(); render(); ver(e.id);
+}
+async function eliminar(){
+  if(!confirm("¿Eliminar definitivamente este equipo? (Si ya no se usa, mejor márcalo como 'Dado de baja')"))return;
+  await dbDel(actual); equipos=await dbAll(); dForm.close(); render();
+}
+
+/* ---------- Detalle y QR ---------- */
+const urlEq=id=>location.origin+location.pathname+"#eq="+encodeURIComponent(id);
+function ver(id){
+  const e=equipos.find(x=>x.id===id||x.serie===id); if(!e)return;
+  actual=e.id; dTit.textContent=`S/N ${e.serie} — ${e.cat}`;
+  dFoto.src=e.foto||""; dFoto.style.display=e.foto?"block":"none";
+  const filas=[["Marca",e.marca],["Modelo",e.modelo],["Estado",e.est],["Frecuencia",txtFrec(e)],["Diámetro",txtDiam(e)],
+    ["Ubicación / responsable",e.ubic],["Última calibración",fmt(e.fcal)],["Próxima calibración",e.fprox?fmt(e.fprox)+(vencido(e)?" ⚠️ VENCIDA":""):""],
+    ["Responsable calibración",e.rcal],["Certificado",e.cert],["Equipo asociado",e.asoc],["Observaciones",e.obs]];
+  dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1])}</td></tr>`).join("");
+  qrBox.innerHTML=""; new QRCode(qrBox,{text:urlEq(e.id),width:160,height:160,correctLevel:QRCode.CorrectLevel.M});
+  dDet.open||dDet.showModal();
+}
+function qrDataURL(txt,size=300){
+  const d=document.createElement("div"); new QRCode(d,{text:txt,width:size,height:size,correctLevel:QRCode.CorrectLevel.M});
+  return d.querySelector("canvas").toDataURL("image/png");
+}
+function descargarQR(){
+  const e=actualEq(),a=document.createElement("a");
+  a.href=qrDataURL(urlEq(e.id),400);a.download=`QR_${e.serie}.png`;a.click();
+}
+
+/* ---------- Logo para PDF ---------- */
+let logoData=null;
+(function(){const i=new Image();i.onload=()=>{const c=document.createElement("canvas");c.width=i.width;c.height=i.height;
+  c.getContext("2d").drawImage(i,0,0);logoData={d:c.toDataURL("image/png"),r:i.width/i.height}};i.src="logo-iqs.png"})();
+function encabezado(doc,titulo){
+  const W=doc.internal.pageSize.getWidth();
+  if(logoData)doc.addImage(logoData.d,"PNG",14,7,16*logoData.r,16);
+  doc.setFontSize(14);doc.text(titulo,logoData?20+16*logoData.r:14,17);
+  doc.setFontSize(9);doc.text("Fecha: "+fmt(hoy()),W-14,17,{align:"right"});
+  doc.line(14,25,W-14,25);
+}
+
+/* ---------- Exportaciones ---------- */
+const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["modelo","Modelo"],["est","Estado"],
+  ["frec","Frecuencia"],["diam","Diámetro"],["ubic","Ubicación"],["fcal","Últ. calibración"],["fprox","Próx. calibración"],
+  ["rcal","Resp. calibración"],["cert","Certificado"],["asoc","Asociado a"],["obs","Observaciones"]];
+function valor(e,k){
+  if(k==="fcal"||k==="fprox")return fmt(e[k]);
+  if(k==="frec")return txtFrec(e);
+  if(k==="diam")return txtDiam(e);
+  return e[k]||"";
+}
+function exportarExcel(){
+  const filas=filtrados().map(e=>Object.fromEntries(COLS.map(([k,t])=>[t,valor(e,k)])));
+  const ws=XLSX.utils.json_to_sheet(filas);ws["!cols"]=COLS.map(()=>({wch:16}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Inventario");
+  XLSX.writeFile(wb,`Inventario_Equipos_${hoy()}.xlsx`);
+}
+function exportarPDF(){
+  const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:"landscape"});
+  encabezado(doc,"Inventario de Equipos");
+  const cols=COLS.slice(0,12);
+  doc.autoTable({startY:29,head:[cols.map(c=>c[1])],body:filtrados().map(e=>cols.map(([k])=>valor(e,k))),
+    styles:{fontSize:7.5},headStyles:{fillColor:[11,61,107]},
+    didParseCell:d=>{if(d.section==="body"&&d.column.index===4&&d.cell.raw==="Dado de baja")d.cell.styles.textColor=[180,35,24]}});
+  doc.save(`Inventario_Equipos_${hoy()}.pdf`);
+}
+function fichaPDF(){
+  const e=actualEq(),{jsPDF}=window.jspdf,doc=new jsPDF();
+  encabezado(doc,"Ficha de equipo — S/N "+e.serie);
+  const y=31;
+  if(e.foto)doc.addImage(e.foto,"JPEG",14,y,80,60);
+  doc.addImage(qrDataURL(urlEq(e.id)),"PNG",150,y,45,45);
+  doc.autoTable({startY:e.foto?y+66:y+50,body:COLS.map(([k,t])=>[t,valor(e,k)||"—"]),
+    styles:{fontSize:10},columnStyles:{0:{fontStyle:"bold",cellWidth:50}}});
+  doc.save(`Ficha_${e.serie}.pdf`);
+}
+// Etiquetas QR de 1" x 1" (25,4 mm)
+function etiquetasPDF(lista){
+  const l=lista||filtrados(); if(!l.length)return alert("No hay equipos para imprimir.");
+  const {jsPDF}=window.jspdf,doc=new jsPDF();
+  const L=25.4, gap=3, m=10, qr=20;
+  const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
+  const cols=Math.floor((W-2*m+gap)/(L+gap)), filas=Math.floor((H-2*m+gap)/(L+gap)), porPag=cols*filas;
+  doc.setLineWidth(0.1);doc.setDrawColor(180);
+  l.forEach((e,i)=>{
+    if(i&&i%porPag===0)doc.addPage();
+    const n=i%porPag,x=m+(n%cols)*(L+gap),y=m+Math.floor(n/cols)*(L+gap);
+    doc.rect(x,y,L,L);
+    doc.addImage(qrDataURL(urlEq(e.id),240),"PNG",x+(L-qr)/2,y+0.8,qr,qr);
+    doc.setFontSize(5.5);doc.setFont(undefined,"bold");
+    doc.text("S/N "+e.serie,x+L/2,y+L-1.3,{align:"center",maxWidth:L-1});
+  });
+  doc.save(`Etiquetas_QR_${hoy()}.pdf`);
+}
+
+/* ---------- Gráficos ---------- */
+function abrirGraficos(){
+  dMenu.open&&dMenu.close();
+  gCat.innerHTML=opts(cats,"Todas");gCat.value=fCat.value;
+  gEst.innerHTML=opts(ESTADOS,"Todos");gEst.value=fEst.value;
+  pintarGraficos(true);dGraf.showModal();
+}
+const unicos=a=>[...new Set(a.filter(Boolean))].sort((x,y)=>x.localeCompare(y,"es",{numeric:true}));
+function pintarGraficos(recargarFiltros){
+  let base=equipos.filter(e=>(!gCat.value||e.cat===gCat.value)&&(!gEst.value||e.est===gEst.value));
+  if(recargarFiltros!==false){
+    const mSel=gMarca.value;gMarca.innerHTML=opts(unicos(base.map(e=>e.marca)),"Todas");
+    if([...gMarca.options].some(o=>o.value===mSel))gMarca.value=mSel;
+  }
+  if(gMarca.value)base=base.filter(e=>e.marca===gMarca.value);
+  const moSel=gModelo.value;gModelo.innerHTML=opts(unicos(base.map(e=>e.modelo)),"Todos");
+  if([...gModelo.options].some(o=>o.value===moSel))gModelo.value=moSel;
+  if(gModelo.value)base=base.filter(e=>e.modelo===gModelo.value);
+
+  const grupo=(titulo,fn)=>{
+    const c={};base.forEach(e=>{const k=fn(e)||"Sin dato";c[k]=(c[k]||0)+1});
+    const arr=Object.entries(c).sort((a,b)=>b[1]-a[1]);if(!arr.length)return "";
+    const max=arr[0][1];
+    return `<h3>${titulo}</h3>`+arr.map(([k,v])=>`<div class="gbar"><span title="${esc(k)}">${esc(k)}</span>
+      <div class="b"><i style="width:${v/max*100}%"></i></div><b>${v}</b></div>`).join("");
+  };
+  const hayTrans=base.some(e=>e.frec||e.diam);
+  graficos.innerHTML=`<div class="stats" style="margin-top:12px"><div>Total seleccionado: <b>${base.length}</b></div>
+    <div>Operativos: <b>${base.filter(e=>e.est==="Operativo").length}</b></div>
+    <div>Cal. vencida: <b class="venc">${base.filter(vencido).length}</b></div></div>`
+    +(base.length?grupo("Por categoría",e=>e.cat)+grupo("Por estado",e=>e.est)
+    +grupo("Por marca y modelo",e=>[e.marca,e.modelo].filter(Boolean).join(" "))
+    +(hayTrans?grupo("Transductores por frecuencia",e=>txtFrec(e))+grupo("Transductores por diámetro",e=>txtDiam(e)):"")
+    :'<p style="color:#667085">No hay equipos con esos filtros.</p>');
+}
+
+/* ---------- Menú, categorías, respaldo ---------- */
+function abrirMenu(){dMenu.showModal()}
+function abrirCats(){dMenu.open&&dMenu.close();pintarCats();dCats.showModal()}
+function pintarCats(){
+  catLista.innerHTML=cats.map((c,i)=>`<div class="catrow"><span>${esc(c)} (${equipos.filter(e=>e.cat===c).length})</span>
+    <button class="del" onclick="borrarCat(${i})">✕</button></div>`).join("");
+}
+async function agregarCat(){
+  const v=nuevaCat.value.trim(); if(!v||cats.includes(v))return;
+  cats.push(v);await cfgSet("cats",cats);nuevaCat.value="";llenarSelects();pintarCats();
+}
+async function borrarCat(i){
+  if(equipos.some(e=>e.cat===cats[i]))return alert("Hay equipos en esta categoría. Cámbialos antes de borrarla.");
+  cats.splice(i,1);await cfgSet("cats",cats);llenarSelects();pintarCats();render();
+}
+function respaldo(){
+  const b=new Blob([JSON.stringify({cats,equipos})],{type:"application/json"}),a=document.createElement("a");
+  a.href=URL.createObjectURL(b);a.download=`respaldo_inventario_${hoy()}.json`;a.click();
+}
+async function restaurar(inp){
+  const f=inp.files[0]; if(!f)return;
+  try{
+    const d=JSON.parse(await f.text());
+    if(!confirm(`Se importarán ${d.equipos.length} equipos (se actualizan los que ya existan). ¿Continuar?`))return;
+    for(const e of d.equipos){ if(!e.serie&&e.cod)e.serie=e.cod; await dbPut(e); }
+    cats=[...new Set([...cats,...(d.cats||[])])];await cfgSet("cats",cats);
+    equipos=await dbAll();llenarSelects();render();dMenu.close();alert("Respaldo restaurado.");
+  }catch(err){alert("Archivo no válido.")}
+  inp.value="";
+}
+</script>
+</body>
+</html>
