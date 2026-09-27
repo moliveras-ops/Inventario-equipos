@@ -126,7 +126,7 @@
   <div id="qrPie" style="text-align:center;font-size:.85rem;margin-top:-4px"></div>
   <div class="acts">
     <button class="sec" onclick="descargarQR()">Descargar QR</button>
-    <button class="sec" onclick="etiquetasPDF([actualEq()])">Etiqueta 1"</button>
+    <button class="sec" onclick="etiquetasPDF([actualEq()])">Etiqueta QR</button>
     <button class="sec" onclick="fichaPDF()">Ficha PDF</button>
     <button class="sec" onclick="editar(actual)">Editar</button>
     <button onclick="dDet.close()">Cerrar</button>
@@ -135,11 +135,11 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.5</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.7</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
-    <button onclick="etiquetasPDF()">🏷️ Etiquetas QR 1"×1" (PDF)</button>
+    <button onclick="etiquetasPDF()">🏷️ Etiquetas QR (PDF)</button>
     <button class="sec" onclick="abrirGraficos()">📈 Gráficos de existencia</button>
     <button class="sec" onclick="abrirCats()">🗂️ Administrar categorías</button>
     <button class="sec" onclick="respaldo()">💾 Descargar respaldo (JSON)</button>
@@ -472,25 +472,44 @@ function fichaPDF(){
   doc.save(`Ficha_${e.serie}.pdf`);
 }
 // Etiquetas QR de 1" x 1" (25,4 mm)
+// Etiquetas: cuadradas 1"x1" para equipos; 25 x 50 mm para transductores (se envuelven en el cable)
+const esTrans=e=>/transductor/i.test(e.cat);
 function etiquetasPDF(lista){
-  const l=lista||filtrados(); if(!l.length)return alert("No hay equipos para imprimir.");
+  const l=(lista||filtrados()).slice().sort((a,b)=>esTrans(a)-esTrans(b));
+  if(!l.length)return alert("No hay equipos para imprimir.");
   const {jsPDF}=window.jspdf,doc=new jsPDF();
-  const L=25.4, gap=3, m=10, qr=14.2;
+  const A=25.4, T_ALTO=25, T_LARGO=50, gap=3, m=10;
   const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
-  const cols=Math.floor((W-2*m+gap)/(L+gap)), filas=Math.floor((H-2*m+gap)/(L+gap)), porPag=cols*filas;
-  doc.setLineWidth(0.1);doc.setDrawColor(180);
-  l.forEach((e,i)=>{
-    if(i&&i%porPag===0)doc.addPage();
-    const n=i%porPag,x=m+(n%cols)*(L+gap),y=m+Math.floor(n/cols)*(L+gap);
-    doc.rect(x,y,L,L);
-    doc.addImage(qrDataURL(urlEq(e.id),240),"PNG",x+(L-qr)/2,y+0.8,qr,qr);
-    const cx=x+L/2, mw=L-1.2, lin=lineasEtiqueta(e);
-    doc.setFont(undefined,"bold");doc.setFontSize(5.8);
-    doc.text("S/N "+e.serie,cx,y+17.1,{align:"center",maxWidth:mw});
-    doc.setFont(undefined,"normal");doc.setFontSize(4.5);
-    lin.slice(0,3).forEach((t,n)=>doc.text(doc.splitTextToSize(t,mw)[0],cx,y+19.3+n*2,{align:"center"}));
+  let x=m,y=m,tipoPrev=null;
+  doc.setLineWidth(0.1);doc.setDrawColor(150);
+  l.forEach(e=>{
+    const t=esTrans(e),w=t?T_LARGO:A,h=t?T_ALTO:A;
+    if(tipoPrev!==null&&t!==tipoPrev&&x>m){x=m;y+=A+gap;}   // nueva fila al cambiar de tipo
+    if(x+w>W-m){x=m;y+=A+gap;}
+    if(y+A>H-m){doc.addPage();x=m;y=m;}
+    doc.rect(x,y,w,h);
+    if(t)etqTransductor(doc,e,x,y,h,w); else etqCuadrada(doc,e,x,y,A);
+    x+=w+gap;tipoPrev=t;
   });
   doc.save(`Etiquetas_QR_${hoy()}.pdf`);
+}
+function etqCuadrada(doc,e,x,y,L){
+  const qr=14.2,cx=x+L/2,mw=L-1.2,lin=lineasEtiqueta(e);
+  doc.addImage(qrDataURL(urlEq(e.id),240),"PNG",x+(L-qr)/2,y+0.8,qr,qr);
+  doc.setFont(undefined,"bold");doc.setFontSize(5.8);
+  doc.text("S/N "+e.serie,cx,y+17.1,{align:"center",maxWidth:mw});
+  doc.setFont(undefined,"normal");doc.setFontSize(4.5);
+  lin.slice(0,3).forEach((t,n)=>doc.text(doc.splitTextToSize(t,mw)[0],cx,y+19.3+n*2,{align:"center"}));
+}
+function etqTransductor(doc,e,x,y,A,Lg){
+  const qr=A-2,tx=x+qr+2,mw=Lg-qr-3.2,lin=lineasEtiqueta(e);
+  doc.addImage(qrDataURL(urlEq(e.id),300),"PNG",x+1,y+1,qr,qr);
+  doc.setFont(undefined,"bold");
+  let fs=7.5;doc.setFontSize(fs);
+  while(fs>5&&doc.getTextWidth("S/N "+e.serie)>mw){fs-=0.5;doc.setFontSize(fs);}
+  doc.text("S/N "+e.serie,tx,y+5.5);
+  doc.setFont(undefined,"normal");doc.setFontSize(5.6);
+  lin.slice(0,3).forEach((t,n)=>doc.splitTextToSize(t,mw).slice(0,n===2?2:1).forEach((r,k)=>doc.text(r,tx,y+10+n*3.8+k*2.4)));
 }
 
 /* ---------- Gráficos ---------- */
