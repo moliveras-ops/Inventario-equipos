@@ -52,11 +52,12 @@
   .catrow{display:flex;gap:8px;align-items:center;margin-bottom:6px}.catrow span{flex:1}
   .venc{color:var(--baja);font-weight:600}
   .hint{font-size:.72rem;color:#667085;margin-top:2px}
-  .gbar{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:.85rem}
-  .gbar span:first-child{width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .gbar .b{flex:1;background:var(--gris);border-radius:4px;height:18px;position:relative}
-  .gbar .b i{display:block;height:100%;background:var(--azul2);border-radius:4px}
-  .gbar b{width:30px;text-align:right}
+  .vchart{display:flex;align-items:flex-end;gap:10px;height:190px;padding:6px 4px 0;border-bottom:2px solid var(--borde);overflow-x:auto}
+  .vcol{flex:1;min-width:46px;max-width:90px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .vcol b{font-size:.85rem;margin-bottom:3px}
+  .vcol i{display:block;width:70%;background:var(--azul2);border-radius:4px 4px 0 0;min-height:3px}
+  .vlbl{display:flex;gap:10px;padding:4px 4px 0;overflow-x:auto}
+  .vlbl span{flex:1;min-width:46px;max-width:90px;font-size:.72rem;text-align:center;line-height:1.15;word-break:break-word;color:#475467}
   @media(max-width:520px){.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -134,7 +135,7 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.4</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.5</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
@@ -407,14 +408,17 @@ function filtroInforme(){
 function contar(lista,fn){const c={};lista.forEach(e=>{const k=fn(e)||"Sin dato";c[k]=(c[k]||0)+1});return Object.entries(c).sort((a,b)=>b[1]-a[1])}
 function barrasPDF(doc,titulo,datos,x,y,ancho){
   doc.setFontSize(10);doc.setFont(undefined,"bold");doc.setTextColor(11,61,107);doc.text(titulo,x,y);
-  doc.setFont(undefined,"normal");doc.setTextColor(0);doc.setFontSize(8);
-  const max=Math.max(...datos.map(d=>d[1])),etq=ancho*0.4,bw=ancho-etq-12;y+=3;
-  datos.slice(0,10).forEach(([k,v])=>{
-    doc.text(doc.splitTextToSize(k,etq-2)[0],x,y+3.4);
-    doc.setFillColor(21,90,156);doc.rect(x+etq,y,Math.max(0.8,bw*v/max),4.5,"F");
-    doc.text(String(v),x+etq+bw*v/max+2,y+3.4);y+=6;
+  doc.setFont(undefined,"normal");doc.setTextColor(0);
+  const d=datos.slice(0,12),alto=40,base=y+6+alto,max=Math.max(...d.map(v=>v[1]));
+  const paso=ancho/d.length,bw=Math.min(paso*0.6,18);
+  doc.setDrawColor(150);doc.setLineWidth(0.2);doc.line(x,base,x+ancho,base);
+  d.forEach(([k,v],n)=>{
+    const h=Math.max(0.6,alto*v/max),cx=x+paso*n+paso/2;
+    doc.setFillColor(21,90,156);doc.rect(cx-bw/2,base-h,bw,h,"F");
+    doc.setFontSize(8);doc.text(String(v),cx,base-h-1.2,{align:"center"});
+    doc.setFontSize(6.5);doc.text(doc.splitTextToSize(k,paso-1.5).slice(0,2),cx,base+3.2,{align:"center"});
   });
-  return y+4;
+  return base+12;
 }
 function exportarPDF(){
   const l=filtroInforme(); if(!l.length)return alert("No hay equipos con esos filtros.");
@@ -441,7 +445,7 @@ function exportarPDF(){
       const y1=barrasPDF(doc,...graficos[i],14,y,col);
       const y2=graficos[i+1]?barrasPDF(doc,...graficos[i+1],14+col+10,y,col):y;
       y=Math.max(y1,y2);
-      if(y>170&&i+2<graficos.length){doc.addPage();enc();y=34;}
+      if(y+62>195&&i+2<graficos.length){doc.addPage();enc();y=34;}
     }
   }
   const hayTrans=l.some(e=>e.frec||e.diam);
@@ -512,8 +516,8 @@ function pintarGraficos(recargarFiltros){
     const c={};base.forEach(e=>{const k=fn(e)||"Sin dato";c[k]=(c[k]||0)+1});
     const arr=Object.entries(c).sort((a,b)=>b[1]-a[1]);if(!arr.length)return "";
     const max=arr[0][1];
-    return `<h3>${titulo}</h3>`+arr.map(([k,v])=>`<div class="gbar"><span title="${esc(k)}">${esc(k)}</span>
-      <div class="b"><i style="width:${v/max*100}%"></i></div><b>${v}</b></div>`).join("");
+    return `<h3>${titulo}</h3><div class="vchart">`+arr.map(([k,v])=>`<div class="vcol" title="${esc(k)}: ${v}"><b>${v}</b><i style="height:${Math.max(2,v/max*150)}px"></i></div>`).join("")
+      +`</div><div class="vlbl">`+arr.map(([k])=>`<span>${esc(k)}</span>`).join("")+`</div>`;
   };
   const hayTrans=base.some(e=>e.frec||e.diam);
   graficos.innerHTML=`<div class="stats" style="margin-top:12px"><div>Total seleccionado: <b>${base.length}</b></div>
