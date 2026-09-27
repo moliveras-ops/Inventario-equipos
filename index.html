@@ -615,8 +615,7 @@ function etqCert(doc,e,x,y,LW,LH){
       while(fs>3.8&&doc.getTextWidth(String(val))>x1-x0-0.8){fs-=0.2;doc.setFontSize(fs);}
       doc.text(String(val),x0+0.5,yy);}
   };
-  campos.forEach(([et,val],k)=>linea(et,val,y+17.2+k*5.4));
-  linea("Firma:","",y+44.4);
+  campos.forEach(([et,val],k)=>linea(et,val,y+18+k*6.4));
   doc.setFont(undefined,"normal");doc.setFontSize(3.9);doc.setTextColor(60);
   doc.text("No retirar esta etiqueta",x+LW/2,y+LH-1.6,{align:"center"});
   doc.setTextColor(0);doc.setLineWidth(0.1);doc.setDrawColor(150);
