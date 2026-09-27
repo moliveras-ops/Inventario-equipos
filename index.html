@@ -127,6 +127,7 @@
   <div class="acts">
     <button class="sec" onclick="descargarQR()">Descargar QR</button>
     <button class="sec" onclick="etiquetasPDF([actualEq()])">Etiqueta QR</button>
+    <button class="sec" id="btnCal" onclick="etiquetasCalPDF([actualEq()])">Etiqueta certificado</button>
     <button class="sec" onclick="fichaPDF()">Ficha PDF</button>
     <button class="sec" onclick="editar(actual)">Editar</button>
     <button onclick="dDet.close()">Cerrar</button>
@@ -135,11 +136,12 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.8</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.9</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
     <button onclick="abrirEtiquetas()">🏷️ Etiquetas QR por categoría (PDF)</button>
+    <button onclick="abrirEtqCal()">🏅 Etiquetas "Equipo certificado" (PDF)</button>
     <button class="sec" onclick="abrirGraficos()">📈 Gráficos de existencia</button>
     <button class="sec" onclick="abrirCats()">🗂️ Administrar categorías</button>
     <button class="sec" onclick="respaldo()">💾 Descargar respaldo (JSON)</button>
@@ -168,6 +170,22 @@
   <div class="acts">
     <button class="sec" onclick="dEtq.close()">Cancelar</button>
     <button onclick="generarEtiquetas()">Generar PDF</button>
+  </div>
+</div></dialog>
+
+<!-- Etiquetas de equipo certificado (medidores de espesor) -->
+<dialog id="dCal"><div class="dlg">
+  <h2>Etiquetas "Equipo certificado"</h2>
+  <div class="hint" style="font-size:.85rem">Solo medidores de espesor en estado Operativo · Tamaño 40 × 50 mm</div>
+  <label>Incluir</label>
+  <select id="cFiltro" onchange="cuentaCal()">
+    <option value="todos">Todos los medidores operativos</option>
+    <option value="vig">Operativos con calibración vigente</option>
+  </select>
+  <div class="hint" id="cCuenta"></div>
+  <div class="acts">
+    <button class="sec" onclick="dCal.close()">Cancelar</button>
+    <button onclick="generarCal()">Generar PDF</button>
   </div>
 </div></dialog>
 
@@ -214,8 +232,8 @@ let equipos = [], cats = [], actual = null, fotoTmp = null;
 /* ---------- IndexedDB ---------- */
 let db;
 function abrirDB(){return new Promise((ok,err)=>{
-  const r=indexedDB.open("inventarioIQS",1);
-  r.onupgradeneeded=e=>{const d=e.target.result;d.createObjectStore("equipos",{keyPath:"id"});d.createObjectStore("config")};
+  const r=indexedDB.open("inventarioIQS");
+  r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains("equipos"))d.createObjectStore("equipos",{keyPath:"id"});if(!d.objectStoreNames.contains("config"))d.createObjectStore("config")};
   r.onsuccess=e=>{db=e.target.result;ok()};r.onerror=err;
 })}
 const tx=(s,m="readonly")=>db.transaction(s,m).objectStore(s);
@@ -338,6 +356,7 @@ function ver(id){
     ["Ubicación / responsable",e.ubic],["Última calibración",fmt(e.fcal)],["Próxima calibración",e.fprox?fmt(e.fprox)+(vencido(e)?" ⚠️ VENCIDA":""):""],
     ["Responsable calibración",e.rcal],["Certificado",e.cert],["Equipo asociado",e.asoc],["Observaciones",e.obs]];
   dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1])}</td></tr>`).join("");
+  btnCal.style.display=esMedidor(e)&&e.est==="Operativo"?"":"none";
   qrBox.innerHTML=""; new QRCode(qrBox,{text:urlEq(e.id),width:160,height:160,correctLevel:QRCode.CorrectLevel.M});
   qrPie.innerHTML=`<b>S/N ${esc(e.serie)}</b><br>`+lineasEtiqueta(e).map(esc).join("<br>");
   dDet.open||dDet.showModal();
@@ -548,6 +567,59 @@ function etqTransductor(doc,e,x,y,A,Lg){
   doc.text("S/N "+e.serie,tx,y+5.5);
   doc.setFont(undefined,"normal");doc.setFontSize(5.6);
   lin.slice(0,3).forEach((t,n)=>doc.splitTextToSize(t,mw).slice(0,n===2?2:1).forEach((r,k)=>doc.text(r,tx,y+10+n*3.8+k*2.4)));
+}
+
+/* ---------- Etiquetas "Equipo certificado" (solo medidores de espesor, 40 x 50 mm) ---------- */
+const esMedidor=e=>/espesor/i.test(e.cat||"");
+function abrirEtqCal(){dMenu.open&&dMenu.close();cuentaCal();dCal.showModal();}
+function listaCal(){
+  return equipos.filter(e=>esMedidor(e)&&e.est==="Operativo"&&(cFiltro.value==="todos"||(e.fcal&&!vencido(e))));
+}
+function cuentaCal(){cCuenta.textContent=listaCal().length+" etiquetas"}
+function generarCal(){
+  const l=listaCal(); if(!l.length)return alert("No hay medidores de espesor operativos para esos filtros.");
+  etiquetasCalPDF(l);dCal.close();
+}
+function etiquetasCalPDF(lista){
+  const l=lista.filter(e=>e&&esMedidor(e)&&e.est==="Operativo").sort((a,b)=>a.serie.localeCompare(b.serie,"es",{numeric:true}));
+  if(!l.length)return alert("La etiqueta de equipo certificado es solo para medidores de espesor en estado Operativo.");
+  const {jsPDF}=window.jspdf,doc=new jsPDF();
+  const LW=40,LH=50,gap=3,m=10;
+  const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
+  const cols=Math.floor((W-2*m+gap)/(LW+gap)),filas=Math.floor((H-2*m+gap)/(LH+gap)),porPag=cols*filas;
+  l.forEach((e,i)=>{
+    if(i&&i%porPag===0)doc.addPage();
+    const n=i%porPag,x=m+(n%cols)*(LW+gap),y=m+Math.floor(n/cols)*(LH+gap);
+    etqCert(doc,e,x,y,LW,LH);
+  });
+  doc.save(`Etiquetas_equipo_certificado_${l.length===1?l[0].serie:hoy()}.pdf`);
+}
+function etqCert(doc,e,x,y,LW,LH){
+  const AZ=[30,58,205];
+  // Cabecera azul con logo y título
+  doc.setFillColor(...AZ);doc.roundedRect(x,y,LW,12,2.5,2.5,"F");doc.rect(x,y+8,LW,4,"F");
+  doc.setFillColor(255,255,255);doc.roundedRect(x+2,y+2,15,8,1.3,1.3,"F");
+  if(logoData){const w=Math.min(13.6,6.6*logoData.r),hh=w/logoData.r;doc.addImage(logoData.d,"PNG",x+2+(15-w)/2,y+2+(8-hh)/2,w,hh);}
+  doc.setTextColor(255);doc.setFont(undefined,"bold");doc.setFontSize(6.3);
+  doc.text("EQUIPO",x+19,y+5.6);doc.text("CERTIFICADO",x+19,y+8.7);
+  // Borde
+  doc.setDrawColor(...AZ);doc.setLineWidth(0.5);doc.roundedRect(x,y,LW,LH,2.5,2.5,"S");
+  // Campos
+  doc.setTextColor(0);
+  const campos=[["Marca:",e.marca],["Modelo:",e.modelo],["N° de serie:",e.serie],["Fecha:",fmt(e.fcal)],["Responsable:",e.rcal]];
+  const x0=x+15.5,x1=x+LW-2.2;
+  const linea=(et,val,yy)=>{
+    doc.setFont(undefined,"bold");doc.setFontSize(5);doc.text(et,x+2.2,yy);
+    doc.setDrawColor(90);doc.setLineWidth(0.15);doc.line(x0,yy+0.7,x1,yy+0.7);
+    if(val){doc.setFont(undefined,"normal");let fs=5.6;doc.setFontSize(fs);
+      while(fs>3.8&&doc.getTextWidth(String(val))>x1-x0-0.8){fs-=0.2;doc.setFontSize(fs);}
+      doc.text(String(val),x0+0.5,yy);}
+  };
+  campos.forEach(([et,val],k)=>linea(et,val,y+17.2+k*5.4));
+  linea("Firma:","",y+44.4);
+  doc.setFont(undefined,"normal");doc.setFontSize(3.9);doc.setTextColor(60);
+  doc.text("No retirar esta etiqueta",x+LW/2,y+LH-1.6,{align:"center"});
+  doc.setTextColor(0);doc.setLineWidth(0.1);doc.setDrawColor(150);
 }
 
 /* ---------- Gráficos ---------- */
