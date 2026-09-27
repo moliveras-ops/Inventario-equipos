@@ -1,4 +1,4 @@
-const CACHE = "inventario-v1";
+const CACHE = "inventario-v1.4";
 const ARCHIVOS = [
   "./", "index.html", "manifest.json", "icon-192.png", "icon-512.png", "logo-iqs.png",
   "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
@@ -9,7 +9,7 @@ const ARCHIVOS = [
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c =>
-    Promise.all(ARCHIVOS.map(u => c.add(u).catch(() => {})))
+    Promise.all(ARCHIVOS.map(u => c.add(new Request(u, { cache: "reload" })).catch(() => {})))
   ));
   self.skipWaiting();
 });
@@ -21,11 +21,13 @@ self.addEventListener("activate", e => {
   self.clients.claim();
 });
 
-// Red primero para la página (así ves las actualizaciones), caché si no hay señal
+// Archivos propios: siempre se pide la última versión al servidor (sin caché del navegador).
+// Si no hay señal, se usa la copia guardada.
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  const propio = new URL(e.request.url).origin === self.location.origin;
   e.respondWith(
-    fetch(e.request)
+    fetch(propio ? new Request(e.request, { cache: "no-store" }) : e.request)
       .then(r => { const copia = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copia)); return r; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }))
   );

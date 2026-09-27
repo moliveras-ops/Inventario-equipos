@@ -64,6 +64,7 @@
 <header>
   <img src="logo-iqs.png" alt="IQS" onerror="this.style.display='none'">
   <h1>Inventario Equipos</h1>
+  <button class="sec" onclick="abrirInforme()" title="Informe PDF">📄</button>
   <button class="sec" onclick="abrirGraficos()" title="Gráficos">📈</button>
   <button class="sec" onclick="abrirCats()" title="Categorías">🗂️</button>
   <button class="sec" onclick="abrirMenu()" title="Menú">☰</button>
@@ -133,7 +134,7 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones</h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.4</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
@@ -220,7 +221,7 @@ const cfgSet=(k,v)=>req(tx("config","readwrite").put(v,k));
   llenarSelects(); render();
   const m = location.hash.match(/eq=([^&]+)/);
   if(m) ver(decodeURIComponent(m[1]));
-  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(r=>r&&r.update()).catch(()=>{});
 })();
 window.addEventListener("hashchange",()=>{const m=location.hash.match(/eq=([^&]+)/);if(m)ver(decodeURIComponent(m[1]))});
 
