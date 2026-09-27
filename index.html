@@ -135,11 +135,11 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.7</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.8</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
-    <button onclick="etiquetasPDF()">🏷️ Etiquetas QR (PDF)</button>
+    <button onclick="abrirEtiquetas()">🏷️ Etiquetas QR por categoría (PDF)</button>
     <button class="sec" onclick="abrirGraficos()">📈 Gráficos de existencia</button>
     <button class="sec" onclick="abrirCats()">🗂️ Administrar categorías</button>
     <button class="sec" onclick="respaldo()">💾 Descargar respaldo (JSON)</button>
@@ -155,6 +155,20 @@
   <div id="catLista"></div>
   <div class="catrow"><input id="nuevaCat" placeholder="Nueva categoría"><button onclick="agregarCat()">Agregar</button></div>
   <div class="acts"><button onclick="dCats.close()">Listo</button></div>
+</div></dialog>
+
+<!-- Etiquetas por categoría -->
+<dialog id="dEtq"><div class="dlg">
+  <h2>Etiquetas QR</h2>
+  <label>Categorías a imprimir</label>
+  <div id="eCats" style="display:grid;gap:4px"></div>
+  <label>Estado</label><select id="eEst" onchange="cuentaEtq()"></select>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="eSep" checked style="width:auto"> Cada categoría en hojas separadas</label>
+  <div class="hint" id="eCuenta"></div>
+  <div class="acts">
+    <button class="sec" onclick="dEtq.close()">Cancelar</button>
+    <button onclick="generarEtiquetas()">Generar PDF</button>
+  </div>
 </div></dialog>
 
 <!-- Informe PDF -->
@@ -474,24 +488,48 @@ function fichaPDF(){
 // Etiquetas QR de 1" x 1" (25,4 mm)
 // Etiquetas: cuadradas 1"x1" para equipos; 25 x 50 mm para transductores (se envuelven en el cable)
 const esTrans=e=>/transductor/i.test(e.cat);
-function etiquetasPDF(lista){
-  const l=(lista||filtrados()).slice().sort((a,b)=>esTrans(a)-esTrans(b));
+function abrirEtiquetas(){
+  dMenu.open&&dMenu.close();
+  eCats.innerHTML=cats.map(c=>`<label style="display:flex;gap:8px;align-items:center;margin:0;font-size:.95rem;color:var(--txt)">
+    <input type="checkbox" value="${esc(c)}" checked style="width:auto" onchange="cuentaEtq()">
+    ${esc(c)} (${equipos.filter(e=>e.cat===c).length})</label>`).join("");
+  eEst.innerHTML=opts(ESTADOS,"Todos, excepto dados de baja")+'<option value="*">Todos, incluidos dados de baja</option>';
+  cuentaEtq();dEtq.showModal();
+}
+function listaEtq(){
+  const cs=[...eCats.querySelectorAll("input:checked")].map(i=>i.value);
+  return equipos.filter(e=>cs.includes(e.cat)&&(eEst.value==="*"?true:eEst.value?e.est===eEst.value:e.est!=="Dado de baja"));
+}
+function cuentaEtq(){eCuenta.textContent=listaEtq().length+" etiquetas"}
+function generarEtiquetas(){
+  const l=listaEtq(); if(!l.length)return alert("No hay equipos con esos filtros.");
+  etiquetasPDF(l,eSep.checked);dEtq.close();
+}
+function etiquetasPDF(lista,separar){
+  const l=(lista||filtrados()).slice().sort((a,b)=>(cats.indexOf(a.cat)-cats.indexOf(b.cat))||a.serie.localeCompare(b.serie,"es",{numeric:true}));
   if(!l.length)return alert("No hay equipos para imprimir.");
   const {jsPDF}=window.jspdf,doc=new jsPDF();
   const A=25.4, T_ALTO=25, T_LARGO=50, gap=3, m=10;
   const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
-  let x=m,y=m,tipoPrev=null;
+  const grupos=[];l.forEach(e=>{const g=grupos.find(g=>g.cat===e.cat);g?g.items.push(e):grupos.push({cat:e.cat,items:[e]})});
+  let x=m,y=m,primera=true;
+  const titulo=(g,cont)=>{doc.setFont(undefined,"bold");doc.setFontSize(9);doc.setTextColor(11,61,107);
+    doc.text(`${g.cat} (${g.items.length})${cont?" — continuación":""}`,m,y+3.5);doc.setTextColor(0);y+=6;};
   doc.setLineWidth(0.1);doc.setDrawColor(150);
-  l.forEach(e=>{
-    const t=esTrans(e),w=t?T_LARGO:A,h=t?T_ALTO:A;
-    if(tipoPrev!==null&&t!==tipoPrev&&x>m){x=m;y+=A+gap;}   // nueva fila al cambiar de tipo
-    if(x+w>W-m){x=m;y+=A+gap;}
-    if(y+A>H-m){doc.addPage();x=m;y=m;}
-    doc.rect(x,y,w,h);
-    if(t)etqTransductor(doc,e,x,y,h,w); else etqCuadrada(doc,e,x,y,A);
-    x+=w+gap;tipoPrev=t;
+  grupos.forEach(g=>{
+    if(!primera){ if(separar){doc.addPage();x=m;y=m;} else {x=m;y+=A+gap;if(y+6+A>H-m){doc.addPage();y=m;}} }
+    primera=false;titulo(g);
+    g.items.forEach(e=>{
+      const t=esTrans(e),w=t?T_LARGO:A,h=t?T_ALTO:A;
+      if(x+w>W-m){x=m;y+=A+gap;}
+      if(y+A>H-m){doc.addPage();x=m;y=m;titulo(g,true);}
+      doc.setLineWidth(0.1);doc.setDrawColor(150);doc.rect(x,y,w,h);
+      if(t)etqTransductor(doc,e,x,y,h,w); else etqCuadrada(doc,e,x,y,A);
+      x+=w+gap;
+    });
   });
-  doc.save(`Etiquetas_QR_${hoy()}.pdf`);
+  const nombre=grupos.length===1?grupos[0].cat.replace(/\s+/g,"_"):"Equipos";
+  doc.save(`Etiquetas_QR_${nombre}_${hoy()}.pdf`);
 }
 function etqCuadrada(doc,e,x,y,L){
   const qr=14.2,cx=x+L/2,mw=L-1.2,lin=lineasEtiqueta(e);
