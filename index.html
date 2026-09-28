@@ -147,7 +147,7 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.12</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.13</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
@@ -155,10 +155,30 @@
     <button onclick="abrirEtqCal()">🏅 Etiquetas "Equipo certificado" (PDF)</button>
     <button class="sec" onclick="abrirGraficos()">📈 Gráficos de existencia</button>
     <button class="sec" onclick="abrirCats()">🗂️ Administrar categorías</button>
+    <button class="sec" onclick="abrirFirmas()">✍️ Firmas digitales</button>
     <button class="sec" onclick="respaldo()">💾 Descargar respaldo (JSON)</button>
     <button class="sec" onclick="document.getElementById('impJson').click()">⤴️ Restaurar respaldo</button>
     <input type="file" id="impJson" accept=".json" hidden onchange="restaurar(this)">
     <button class="sec" onclick="dMenu.close()">Cerrar</button>
+  </div>
+</div></dialog>
+
+<!-- Firmas digitales -->
+<dialog id="dFirmas"><div class="dlg">
+  <h2>Firmas digitales</h2>
+  <div class="hint" style="font-size:.85rem">Imágenes .png de firmas (idealmente con fondo transparente). Se usan en los certificados de calibración.</div>
+  <div id="firmaLista" style="margin-top:8px"></div>
+  <h3>Agregar firma</h3>
+  <div class="grid2">
+    <div><label>Nombre *</label><input id="f_nombre" placeholder="Nombre completo"></div>
+    <div><label>Cargo</label><input id="f_cargo" placeholder="Inspector Nivel II UT…"></div>
+  </div>
+  <label>Imagen de la firma (.png) *</label>
+  <input type="file" id="f_png" accept="image/png" onchange="prevFirma(this)">
+  <img id="f_prev" style="display:none;max-width:220px;max-height:90px;margin-top:6px;background:#fff;border:1px dashed var(--borde);border-radius:6px;padding:4px">
+  <div class="acts">
+    <button class="sec" onclick="dFirmas.close()">Cerrar</button>
+    <button onclick="agregarFirma()">Guardar firma</button>
   </div>
 </div></dialog>
 
@@ -222,6 +242,12 @@
   <div class="acts" style="justify-content:flex-start;margin-top:6px"><button type="button" class="sec" onclick="ccFila()">+ Agregar punto</button></div>
   <div id="ccRes" style="font-weight:600;margin-top:6px"></div>
   <label>Observaciones</label><textarea id="cc_obs" rows="2"></textarea>
+  <h3>Firmas</h3>
+  <div class="grid2">
+    <div><label>Firma — Realizado por</label><select id="cc_f1"></select></div>
+    <div><label>Firma — Revisado / aprobado por</label><select id="cc_f2"></select></div>
+  </div>
+  <div class="hint"><a href="#" onclick="abrirFirmas(true);return false">✍️ Administrar firmas digitales</a></div>
   <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="cc_act" checked style="width:auto"> Actualizar en la ficha: fecha de calibración, responsable y N° de certificado</label>
   <div class="acts">
     <button type="button" class="sec" onclick="dCC.close()">Cancelar</button>
@@ -710,6 +736,52 @@ function etqCert(doc,e,x,y,LW,LH){
   doc.setTextColor(0);doc.setLineWidth(0.1);doc.setDrawColor(150);
 }
 
+const norm=s=>String(s??"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+/* ---------- Firmas digitales ---------- */
+let firmas=[],firmaTmp=null,firmasDesdeCert=false;
+async function cargarFirmas(){firmas=(await cfgGet("firmas"))||[];}
+function abrirFirmas(desdeCert){
+  firmasDesdeCert=!!desdeCert;dMenu.open&&dMenu.close();
+  f_nombre.value="";f_cargo.value="";f_png.value="";f_prev.style.display="none";firmaTmp=null;
+  pintarFirmas();dFirmas.showModal();
+}
+function pintarFirmas(){
+  firmaLista.innerHTML=firmas.length?firmas.map(f=>`<div class="catrow" style="border-bottom:1px solid var(--gris);padding:6px 0">
+    <img src="${f.png}" style="width:90px;height:40px;object-fit:contain;background:#fff;border-radius:4px;border:1px solid var(--borde)">
+    <span><b>${esc(f.nombre)}</b>${f.cargo?`<br><small style="color:#667085">${esc(f.cargo)}</small>`:""}</span>
+    <button class="del" style="padding:6px 10px" onclick="borrarFirma('${f.id}')">✕</button></div>`).join("")
+    :'<p style="color:#667085">Aún no hay firmas guardadas.</p>';
+}
+function prevFirma(inp){
+  const f=inp.files[0];firmaTmp=null;f_prev.style.display="none";if(!f)return;
+  if(!/png/i.test(f.type)&&!/\.png$/i.test(f.name)){inp.value="";return alert("La firma debe ser un archivo .png");}
+  const img=new Image();img.onload=()=>{
+    const k=Math.min(1,700/img.width,280/img.height),c=document.createElement("canvas");
+    c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    firmaTmp={png:c.toDataURL("image/png"),r:c.width/c.height};f_prev.src=firmaTmp.png;f_prev.style.display="block";URL.revokeObjectURL(img.src);
+  };img.onerror=()=>{inp.value="";alert("No se pudo leer la imagen.");};img.src=URL.createObjectURL(f);
+}
+async function agregarFirma(){
+  const n=f_nombre.value.trim();
+  if(!n)return alert("Ingresa el nombre de la persona.");
+  if(!firmaTmp)return alert("Selecciona la imagen .png de la firma.");
+  firmas.push({id:crypto.randomUUID(),nombre:n,cargo:f_cargo.value.trim(),png:firmaTmp.png,r:firmaTmp.r});
+  await cfgSet("firmas",firmas);
+  f_nombre.value="";f_cargo.value="";f_png.value="";f_prev.style.display="none";firmaTmp=null;
+  pintarFirmas();if(dCC.open)llenarSelFirmas();
+}
+async function borrarFirma(id){
+  const f=firmas.find(x=>x.id===id);
+  if(!confirm(`¿Eliminar la firma de ${f.nombre}? (Los certificados ya emitidos la conservan)`))return;
+  firmas=firmas.filter(x=>x.id!==id);await cfgSet("firmas",firmas);pintarFirmas();if(dCC.open)llenarSelFirmas();
+}
+function llenarSelFirmas(v1,v2){
+  const o='<option value="">— Sin firma digital —</option>'+firmas.map(f=>`<option value="${f.id}">${esc(f.nombre)}${f.cargo?" · "+esc(f.cargo):""}</option>`).join("");
+  const a=v1!==undefined?v1:cc_f1.value,b=v2!==undefined?v2:cc_f2.value;
+  cc_f1.innerHTML=o;cc_f2.innerHTML=o;
+  cc_f1.value=firmas.some(f=>f.id===a)?a:"";cc_f2.value=firmas.some(f=>f.id===b)?b:"";
+}
+
 /* ---------- Certificado de calibración (medidores de espesor) ---------- */
 const PUNTOS_DEF=["2.5","5","7.5","10","12.5"];
 const PATRON_DEF="Bloque escalonado acero 1018, 2,5–12,5 mm";
@@ -731,6 +803,9 @@ async function abrirCertCal(){
   cc_trans.value=u.transId&&trans.some(t=>t.id===u.transId)?u.transId:asoc?asoc.id:"";
   ccTabla.innerHTML=`<tr style="text-align:left;color:var(--txt)"><th>Nominal (mm)</th><th>Lect. 1</th><th>Lect. 2</th><th>Lect. 3</th><th>Prom.</th><th>Error</th><th></th><th></th></tr>`;
   (u.puntos&&u.puntos.length?u.puntos.map(p=>p.nom):PUNTOS_DEF).forEach(n=>ccFila(n));
+  await cargarFirmas();
+  const porNombre=firmas.find(f=>norm(f.nombre)===norm(cc_resp.value));
+  llenarSelFirmas(u.f1&&u.f1.id||(porNombre?porNombre.id:""),u.f2&&u.f2.id||"");
   ccCalc();dDet.close();dCC.showModal();
 }
 function ccFila(nom=""){
@@ -771,7 +846,8 @@ async function emitirCertCal(ev){
     transId:t?t.id:"",trans:t?`S/N ${t.serie} · ${[t.marca,t.modelo].filter(Boolean).join(" ")} · ${[txtFrec(t),txtDiam(t)].filter(Boolean).join(" / ")}`:"",
     vel:cc_vel.value,patserie:cc_patserie.value.trim(),patron:cc_patron.value.trim(),patcert:cc_patcert.value.trim(),temp:cc_temp.value,tol:cc_tol.value,
     puntos:v.map(p=>({nom:p.nom,ls:p.ls,prom:+p.prom.toFixed(3),err:+p.err.toFixed(3),ok:p.ok})),cumple:v.every(p=>p.ok),
-    obs:cc_obs.value.trim(),emitido:new Date().toISOString()};
+    obs:cc_obs.value.trim(),emitido:new Date().toISOString(),
+    f1:(firmas.find(f=>f.id===cc_f1.value)||null),f2:(firmas.find(f=>f.id===cc_f2.value)||null)};
   e.certs=[...(e.certs||[]),c];
   if(cc_act.checked){e.fcal=c.fecha;e.fprox=c.prox;e.rcal=c.resp;e.cert=c.num;}
   e.act=new Date().toISOString();
@@ -818,13 +894,19 @@ function certCalPDF(id,num){
   y+=20;
   if(c.obs){y=sec("Observaciones",y);doc.setFontSize(9);const t=doc.splitTextToSize(c.obs,W-28);doc.text(t,14,y+3);y+=t.length*4.2+6;}
   // Firmas
-  const H=doc.internal.pageSize.getHeight();let yf=Math.max(y+18,H-48);
+  const H=doc.internal.pageSize.getHeight();let yf=Math.max(y+26,H-48);
   if(yf>H-30){doc.addPage();yf=50;}
   const cw=(W-28-20)/2;
-  [["Realizado por",c.resp],["Revisado / aprobado por",""]].forEach(([t,n],i)=>{
-    const x=14+i*(cw+20);doc.setDrawColor(0);doc.setLineWidth(0.3);doc.line(x,yf,x+cw,yf);
+  [["Realizado por",c.resp,c.f1],["Revisado / aprobado por",c.f2?c.f2.nombre:"",c.f2]].forEach(([t,n,f],i)=>{
+    const x=14+i*(cw+20);
+    if(f&&f.png){
+      const r=f.r||3,maxW=Math.min(cw-10,55),maxH=20;let w=maxW,h=w/r;if(h>maxH){h=maxH;w=h*r;}
+      try{doc.addImage(f.png,"PNG",x+(cw-w)/2,yf-h-1,w,h);}catch(err){}
+    }
+    doc.setDrawColor(0);doc.setLineWidth(0.3);doc.line(x,yf,x+cw,yf);
     doc.setFontSize(9);doc.setFont(undefined,"bold");doc.text(t,x+cw/2,yf+5,{align:"center"});
     doc.setFont(undefined,"normal");doc.text(n||"Nombre y firma",x+cw/2,yf+9.5,{align:"center"});
+    if(f&&f.cargo){doc.setFontSize(8);doc.setTextColor(90);doc.text(f.cargo,x+cw/2,yf+13.5,{align:"center",maxWidth:cw});doc.setTextColor(0);}
   });
   // Pie con QR
   doc.addImage(qrDataURL(urlEq(e.id),200),"PNG",14,H-24,16,16);
@@ -889,7 +971,8 @@ const blobToDataURL=b=>new Promise((ok,err)=>{const r=new FileReader();r.onload=
 async function respaldo(){
   const docs=await docAll();
   const docsJ=await Promise.all(docs.map(async d=>({id:d.id,nombre:d.nombre,tipo:d.tipo,data:await blobToDataURL(d.data)})));
-  const b=new Blob([JSON.stringify({cats,equipos,docs:docsJ})],{type:"application/json"}),a=document.createElement("a");
+  await cargarFirmas();
+  const b=new Blob([JSON.stringify({cats,equipos,docs:docsJ,firmas})],{type:"application/json"}),a=document.createElement("a");
   a.href=URL.createObjectURL(b);a.download=`respaldo_inventario_${hoy()}.json`;a.click();
 }
 async function restaurar(inp){
@@ -900,6 +983,7 @@ async function restaurar(inp){
     for(const e of d.equipos){ if(!e.serie&&e.cod)e.serie=e.cod; await dbPut(e); }
     for(const x of d.docs||[]){ if(!x.id.startsWith("fab_"))continue; const blob=await (await fetch(x.data)).blob(); await docPut({id:x.id,nombre:x.nombre,tipo:x.tipo,data:blob}); }
     cats=[...new Set([...cats,...(d.cats||[])])];await cfgSet("cats",cats);
+    if(Array.isArray(d.firmas)&&d.firmas.length){await cargarFirmas();d.firmas.forEach(f=>{if(!firmas.some(x=>x.id===f.id))firmas.push(f)});await cfgSet("firmas",firmas);}
     equipos=await dbAll();llenarSelects();render();dMenu.close();alert("Respaldo restaurado.");
   }catch(err){alert("Archivo no válido.")}
   inp.value="";

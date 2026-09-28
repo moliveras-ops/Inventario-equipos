@@ -1,4 +1,4 @@
-const CACHE = "inventario-v1.12";
+const CACHE = "inventario-v1.13";
 const ARCHIVOS = [
   "./", "index.html", "manifest.json", "icon-192.png", "icon-512.png", "logo-iqs.png",
   "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
