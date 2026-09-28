@@ -1,6 +1,7 @@
-const CACHE = "inventario-v1.13";
+const CACHE = "inventario-v1.14";
+const CDN = ["cdnjs.cloudflare.com", "cdn.jsdelivr.net", "www.gstatic.com"];
 const ARCHIVOS = [
-  "./", "index.html", "manifest.json", "icon-192.png", "icon-512.png", "logo-iqs.png",
+  "./", "index.html", "sync.js", "firebase-config.js", "manifest.json", "icon-192.png", "icon-512.png", "logo-iqs.png",
   "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
   "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
   "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
@@ -25,7 +26,10 @@ self.addEventListener("activate", e => {
 // Si no hay señal, se usa la copia guardada.
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
-  const propio = new URL(e.request.url).origin === self.location.origin;
+  const u = new URL(e.request.url);
+  const propio = u.origin === self.location.origin;
+  // Solo se cachean archivos de la app y librerías. Las conexiones de Firebase (datos y login) no pasan por aquí.
+  if (!propio && !CDN.includes(u.hostname)) return;
   e.respondWith(
     fetch(propio ? new Request(e.request, { cache: "no-store" }) : e.request)
       .then(r => { const copia = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copia)); return r; })

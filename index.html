@@ -68,6 +68,7 @@
   <button class="sec" onclick="abrirInforme()" title="Informe PDF">📄</button>
   <button class="sec" onclick="abrirGraficos()" title="Gráficos">📈</button>
   <button class="sec" onclick="abrirCats()" title="Categorías">🗂️</button>
+  <button class="sec" id="syncIco" onclick="abrirSync()" title="Sincronización" style="opacity:.45">☁️</button>
   <button class="sec" onclick="abrirMenu()" title="Menú">☰</button>
 </header>
 
@@ -147,7 +148,7 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.13</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.14</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
@@ -156,11 +157,29 @@
     <button class="sec" onclick="abrirGraficos()">📈 Gráficos de existencia</button>
     <button class="sec" onclick="abrirCats()">🗂️ Administrar categorías</button>
     <button class="sec" onclick="abrirFirmas()">✍️ Firmas digitales</button>
+    <button class="sec" onclick="abrirSync()">☁️ Sincronización en la nube</button>
     <button class="sec" onclick="respaldo()">💾 Descargar respaldo (JSON)</button>
     <button class="sec" onclick="document.getElementById('impJson').click()">⤴️ Restaurar respaldo</button>
     <input type="file" id="impJson" accept=".json" hidden onchange="restaurar(this)">
     <button class="sec" onclick="dMenu.close()">Cerrar</button>
   </div>
+</div></dialog>
+
+<!-- Sincronización -->
+<dialog id="dSync"><div class="dlg">
+  <h2>☁️ Sincronización en la nube</h2>
+  <p id="syncTxt" style="font-weight:600;margin:0 0 8px">Cargando…</p>
+  <div id="syncLogin">
+    <div class="hint" style="font-size:.85rem">Inicia sesión con el mismo usuario en todos tus dispositivos (teléfono, PC). Solo se pide una vez por dispositivo.</div>
+    <label>Correo</label><input id="s_mail" type="email" autocomplete="username">
+    <label>Contraseña</label><input id="s_pass" type="password" autocomplete="current-password">
+    <div class="acts"><button onclick="entrarSync()">Iniciar sesión</button></div>
+  </div>
+  <div id="syncOn" style="display:none">
+    <div class="hint" style="font-size:.85rem">Sesión: <b id="syncMail"></b>. Los cambios se suben automáticamente; sin señal quedan en cola y se envían al recuperar conexión.</div>
+    <div class="acts"><button class="sec" onclick="Sync.forzar()">🔄 Sincronizar ahora</button><button class="del" onclick="salirSync()">Cerrar sesión</button></div>
+  </div>
+  <div class="acts"><button class="sec" onclick="dSync.close()">Cerrar</button></div>
 </div></dialog>
 
 <!-- Firmas digitales -->
@@ -308,16 +327,47 @@ function abrirDB(ver){return new Promise((ok,err)=>{
 })}
 const tx=(s,m="readonly")=>db.transaction(s,m).objectStore(s);
 const req=r=>new Promise((ok,err)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>err(r.error)});
-const docGet=id=>req(tx("docs").get(id));
-const docPut=d=>req(tx("docs","readwrite").put(d));
-const docDel=id=>req(tx("docs","readwrite").delete(id));
+// Operaciones solo locales (L). Las versiones sin L además envían el cambio a la nube.
+const docGetL=id=>req(tx("docs").get(id));
+const docPutL=d=>req(tx("docs","readwrite").put(d));
+const docDelL=id=>req(tx("docs","readwrite").delete(id));
 const docAll=()=>req(tx("docs").getAll());
 const idFab=id=>"fab_"+id;
 const dbAll=()=>req(tx("equipos").getAll());
-const dbPut=e=>req(tx("equipos","readwrite").put(e));
-const dbDel=id=>req(tx("equipos","readwrite").delete(id));
+const dbGetL=id=>req(tx("equipos").get(id));
+const dbPutL=e=>req(tx("equipos","readwrite").put(e));
+const dbDelL=id=>req(tx("equipos","readwrite").delete(id));
 const cfgGet=k=>req(tx("config").get(k));
-const cfgSet=(k,v)=>req(tx("config","readwrite").put(v,k));
+const cfgSetL=(k,v)=>req(tx("config","readwrite").put(v,k));
+const sync=()=>window.Sync&&window.Sync.activo?window.Sync:null;
+async function dbPut(e){e._u=Date.now();await dbPutL(e);sync()?.equipo(e);}
+async function dbDel(id){await dbDelL(id);
+  if(sync())sync().borrarEquipo(id);else{const p=(await cfgGet("_pendBorr"))||[];p.push(id);await cfgSetL("_pendBorr",p);}}
+async function cfgSet(k,v){await cfgSetL(k,v);sync()?.cfg(k,v);}
+async function docPut(d){d._u=Date.now();await docPutL(d);sync()?.archivo(d);}
+async function docDel(id){const x=await docGetL(id);await docDelL(id);if(x)sync()?.borrarArchivo(id);}
+async function docGet(id){return (await docGetL(id))||(sync()?await sync().bajarArchivo(id):null);}
+async function cfgAll(){const st=tx("config"),[ks,vs]=await Promise.all([req(st.getAllKeys()),req(st.getAll())]);
+  const o={};ks.forEach((k,i)=>{if(!String(k).startsWith("_"))o[k]=vs[i]});return o;}
+
+/* ---------- Puente con sync.js ---------- */
+window.InvApp={
+  local:{get:dbGetL,put:dbPutL,del:dbDelL,all:dbAll,cfgAll,cfgSet:cfgSetL,docGet:docGetL,docPut:docPutL,docDel:docDelL,docAll,
+    async pendBorr(v){if(v)return cfgSetL("_pendBorr",v);return (await cfgGet("_pendBorr"))||[];}},
+  async refrescar(){
+    equipos=await dbAll();cats=(await cfgGet("cats"))||cats;await cargarFirmas();
+    llenarSelects();render();
+    if(dDet.open&&actual)ver(actual);
+    if(dCats.open)pintarCats();
+    if(dFirmas.open)pintarFirmas();
+  },
+  estadoSync(txt,tipo){
+    syncTxt.textContent=txt;
+    syncIco.textContent={ok:"☁️",sync:"🔄",err:"⚠️",off:"☁️"}[tipo]||"☁️";
+    syncIco.style.opacity=tipo==="off"?.45:1;syncIco.title=txt;
+    pintarSync();
+  }
+};
 
 /* ---------- Inicio ---------- */
 (async()=>{
@@ -952,6 +1002,21 @@ function pintarGraficos(recargarFiltros){
     :'<p style="color:#667085">No hay equipos con esos filtros.</p>');
 }
 
+/* ---------- Sincronización ---------- */
+function abrirSync(){dMenu.open&&dMenu.close();pintarSync();dSync.showModal();}
+function pintarSync(){
+  const S=window.Sync,on=!!(S&&S.activo);
+  syncLogin.style.display=S&&S.configurado&&!on?"":"none";
+  syncOn.style.display=on?"":"none";
+  if(on)syncMail.textContent=S.email;
+}
+async function entrarSync(){
+  if(!window.Sync)return alert("El módulo de sincronización aún no carga. Revisa la conexión.");
+  try{await Sync.entrar(s_mail.value.trim(),s_pass.value);s_pass.value="";}
+  catch(e){alert("No se pudo iniciar sesión: "+(/invalid|wrong|not-found/.test(e.code)?"correo o contraseña incorrectos.":e.code||e.message));}
+}
+async function salirSync(){if(confirm("¿Cerrar sesión? Los datos quedan en este dispositivo pero dejarán de sincronizarse."))await Sync.salir();}
+
 /* ---------- Menú, categorías, respaldo ---------- */
 function abrirMenu(){dMenu.showModal()}
 function abrirCats(){dMenu.open&&dMenu.close();pintarCats();dCats.showModal()}
@@ -989,5 +1054,7 @@ async function restaurar(inp){
   inp.value="";
 }
 </script>
+<script src="firebase-config.js"></script>
+<script type="module" src="sync.js"></script>
 </body>
 </html>
