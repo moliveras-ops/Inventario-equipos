@@ -106,6 +106,14 @@
     <div><label>N° certificado</label><input id="e_cert"></div>
   </div>
   <label>Equipo asociado</label><input id="e_asoc" placeholder="Ej.: serie del medidor al que pertenece">
+  <h3>Certificado de calibración de fábrica</h3>
+  <div class="grid2">
+    <div><label>N° certificado de fábrica</label><input id="e_fabnum"></div>
+    <div><label>Fecha del certificado</label><input id="e_fabfecha" type="date"></div>
+  </div>
+  <label>Archivo (PDF o foto)</label>
+  <input type="file" id="e_fabfile" accept="application/pdf,image/*" onchange="cargarFab(this)">
+  <div class="hint" id="fabInfo"></div>
   <label>Observaciones</label><textarea id="e_obs" rows="2"></textarea>
   <label>Foto</label>
   <input type="file" id="e_foto" accept="image/*" capture="environment" onchange="cargarFoto(this)">
@@ -128,6 +136,7 @@
   <div class="acts">
     <button class="sec" onclick="descargarQR()">Descargar QR</button>
     <button class="sec" onclick="etiquetasPDF([actualEq()])">Etiqueta QR</button>
+    <button class="sec" id="btnFab" onclick="verFab()">📎 Cert. de fábrica</button>
     <button id="btnCertCal" onclick="abrirCertCal()">📜 Certificado de calibración</button>
     <button class="sec" id="btnCal" onclick="etiquetasCalPDF([actualEq()])">Etiqueta certificado</button>
     <button class="sec" onclick="fichaPDF()">Ficha PDF</button>
@@ -138,7 +147,7 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.11</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.12</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
@@ -262,13 +271,22 @@ let equipos = [], cats = [], actual = null, fotoTmp = null;
 
 /* ---------- IndexedDB ---------- */
 let db;
-function abrirDB(){return new Promise((ok,err)=>{
-  const r=indexedDB.open("inventarioIQS");
-  r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains("equipos"))d.createObjectStore("equipos",{keyPath:"id"});if(!d.objectStoreNames.contains("config"))d.createObjectStore("config")};
-  r.onsuccess=e=>{db=e.target.result;ok()};r.onerror=err;
+const STORES=[["equipos",{keyPath:"id"}],["config",undefined],["docs",{keyPath:"id"}]];
+function abrirDB(ver){return new Promise((ok,err)=>{
+  const r=ver?indexedDB.open("inventarioIQS",ver):indexedDB.open("inventarioIQS");
+  r.onupgradeneeded=e=>{const d=e.target.result;STORES.forEach(([n,o])=>{if(!d.objectStoreNames.contains(n))d.createObjectStore(n,o)})};
+  r.onsuccess=e=>{const d=e.target.result;
+    if(STORES.every(([n])=>d.objectStoreNames.contains(n))){db=d;return ok();}
+    const v=d.version+1;d.close();abrirDB(v).then(ok,err);};
+  r.onerror=()=>err(r.error);
 })}
 const tx=(s,m="readonly")=>db.transaction(s,m).objectStore(s);
 const req=r=>new Promise((ok,err)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>err(r.error)});
+const docGet=id=>req(tx("docs").get(id));
+const docPut=d=>req(tx("docs","readwrite").put(d));
+const docDel=id=>req(tx("docs","readwrite").delete(id));
+const docAll=()=>req(tx("docs").getAll());
+const idFab=id=>"fab_"+id;
 const dbAll=()=>req(tx("equipos").getAll());
 const dbPut=e=>req(tx("equipos","readwrite").put(e));
 const dbDel=id=>req(tx("equipos","readwrite").delete(id));
@@ -342,7 +360,8 @@ function render(){
 }
 
 /* ---------- Formulario ---------- */
-const CAMPOS=["cat","serie","marca","modelo","est","ubic","frec","diam","fcal","fprox","rcal","cert","asoc","obs"];
+const CAMPOS=["cat","serie","marca","modelo","est","ubic","frec","diam","fcal","fprox","rcal","cert","asoc","obs","fabnum","fabfecha"];
+let fabTmp;
 function editar(id){
   dDet.open&&dDet.close();
   const e=equipos.find(x=>x.id===id)||{};
@@ -353,8 +372,19 @@ function editar(id){
   if(e.frec)e_frec.value=e.frec; if(e.diam)e_diam.value=e.diam;
   fotoTmp=e.foto||null; prevFoto.src=fotoTmp||""; prevFoto.style.display=fotoTmp?"block":"none";
   e_foto.value=""; btnDel.style.display=e.id?"":"none";
+  e_fabfile.value=""; fabTmp=undefined; pintarFab(e);
   actual=e.id||null; dForm.showModal();
 }
+function pintarFab(e){
+  const nombre=fabTmp?fabTmp.nombre:fabTmp===null?"":(e&&e.fabArch)||"";
+  fabInfo.innerHTML=nombre?`📎 ${esc(nombre)} · <a href="#" onclick="quitarFab();return false">Quitar</a>`:"Sin archivo adjunto";
+}
+function cargarFab(inp){
+  const f=inp.files[0]; if(!f)return;
+  if(f.size>15*1024*1024){inp.value="";return alert("El archivo pesa más de 15 MB. Usa uno más liviano.");}
+  fabTmp={nombre:f.name,tipo:f.type||"application/octet-stream",data:f};pintarFab();
+}
+function quitarFab(){fabTmp=null;e_fabfile.value="";pintarFab();}
 function cargarFoto(inp){
   const f=inp.files[0]; if(!f)return;
   const img=new Image(); img.onload=()=>{
@@ -371,11 +401,24 @@ async function guardar(ev){
   CAMPOS.forEach(c=>e[c]=document.getElementById("e_"+c).value.trim());
   if(equipos.some(x=>(x.serie||"").toLowerCase()===e.serie.toLowerCase()&&x.id!==e.id))
     return alert("Ya existe un equipo con ese número de serie.");
+  try{
+    if(fabTmp===null&&prev.fabArch){await docDel(idFab(e.id));delete e.fabArch;}
+    else if(fabTmp){await docPut({id:idFab(e.id),...fabTmp});e.fabArch=fabTmp.nombre;}
+  }catch(err){return alert("No se pudo guardar el archivo del certificado (¿falta espacio en el teléfono?).");}
   await dbPut(e); equipos=await dbAll(); dForm.close(); render(); ver(e.id);
 }
 async function eliminar(){
   if(!confirm("¿Eliminar definitivamente este equipo? (Si ya no se usa, mejor márcalo como 'Dado de baja')"))return;
-  await dbDel(actual); equipos=await dbAll(); dForm.close(); render();
+  await dbDel(actual); await docDel(idFab(actual)); equipos=await dbAll(); dForm.close(); render();
+}
+
+/* ---------- Certificado de fábrica ---------- */
+async function verFab(){
+  const d=await docGet(idFab(actual)); if(!d)return alert("No se encontró el archivo del certificado de fábrica.");
+  const url=URL.createObjectURL(d.data),a=document.createElement("a");
+  a.href=url;a.target="_blank";a.rel="noopener";
+  if(!/pdf|image/.test(d.tipo))a.download=d.nombre;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);
 }
 
 /* ---------- Detalle y QR ---------- */
@@ -386,9 +429,10 @@ function ver(id){
   dFoto.src=e.foto||""; dFoto.style.display=e.foto?"block":"none";
   const filas=[["Marca",e.marca],["Modelo",e.modelo],["Estado",e.est],["Frecuencia",txtFrec(e)],["Diámetro",txtDiam(e)],
     ["Ubicación / responsable",e.ubic],["Última calibración",fmt(e.fcal)],["Próxima calibración",e.fprox?fmt(e.fprox)+(vencido(e)?" ⚠️ VENCIDA":""):""],
-    ["Responsable calibración",e.rcal],["Certificado",e.cert],["Equipo asociado",e.asoc],["Observaciones",e.obs]];
+    ["Responsable calibración",e.rcal],["Certificado",e.cert],["Cert. de fábrica",[e.fabnum,fmt(e.fabfecha),e.fabArch?"📎 adjunto":""].filter(Boolean).join(" · ")],["Equipo asociado",e.asoc],["Observaciones",e.obs]];
   dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1])}</td></tr>`).join("");
   btnCal.style.display=esMedidor(e)&&e.est==="Operativo"?"":"none";
+  btnFab.style.display=e.fabArch?"":"none";
   btnCertCal.style.display=esMedidor(e)&&e.est!=="Dado de baja"?"":"none";
   const cc=(e.certs||[]).slice().reverse();
   dCerts.innerHTML=cc.length?`<h3>Certificados de calibración emitidos</h3>`+cc.map(c=>`<div class="catrow" style="font-size:.88rem;border-bottom:1px solid var(--gris);padding:4px 0">
@@ -446,9 +490,10 @@ function numerarPaginas(doc){
 /* ---------- Exportaciones ---------- */
 const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["modelo","Modelo"],["est","Estado"],
   ["frec","Frecuencia"],["diam","Diámetro"],["ubic","Ubicación"],["fcal","Últ. calibración"],["fprox","Próx. calibración"],
-  ["rcal","Resp. calibración"],["cert","Certificado"],["asoc","Asociado a"],["obs","Observaciones"]];
+  ["rcal","Resp. calibración"],["cert","Certificado"],["asoc","Asociado a"],["obs","Observaciones"],
+  ["fabnum","Cert. fábrica N°"],["fabfecha","Fecha cert. fábrica"]];
 function valor(e,k){
-  if(k==="fcal"||k==="fprox")return fmt(e[k]);
+  if(k==="fcal"||k==="fprox"||k==="fabfecha")return fmt(e[k]);
   if(k==="frec")return txtFrec(e);
   if(k==="diam")return txtDiam(e);
   return e[k]||"";
@@ -840,16 +885,20 @@ async function borrarCat(i){
   if(equipos.some(e=>e.cat===cats[i]))return alert("Hay equipos en esta categoría. Cámbialos antes de borrarla.");
   cats.splice(i,1);await cfgSet("cats",cats);llenarSelects();pintarCats();render();
 }
-function respaldo(){
-  const b=new Blob([JSON.stringify({cats,equipos})],{type:"application/json"}),a=document.createElement("a");
+const blobToDataURL=b=>new Promise((ok,err)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=err;r.readAsDataURL(b)});
+async function respaldo(){
+  const docs=await docAll();
+  const docsJ=await Promise.all(docs.map(async d=>({id:d.id,nombre:d.nombre,tipo:d.tipo,data:await blobToDataURL(d.data)})));
+  const b=new Blob([JSON.stringify({cats,equipos,docs:docsJ})],{type:"application/json"}),a=document.createElement("a");
   a.href=URL.createObjectURL(b);a.download=`respaldo_inventario_${hoy()}.json`;a.click();
 }
 async function restaurar(inp){
   const f=inp.files[0]; if(!f)return;
   try{
     const d=JSON.parse(await f.text());
-    if(!confirm(`Se importarán ${d.equipos.length} equipos (se actualizan los que ya existan). ¿Continuar?`))return;
+    if(!confirm(`Se importarán ${d.equipos.length} equipos${d.docs&&d.docs.length?` y ${d.docs.length} certificados adjuntos`:""} (se actualizan los que ya existan). ¿Continuar?`))return;
     for(const e of d.equipos){ if(!e.serie&&e.cod)e.serie=e.cod; await dbPut(e); }
+    for(const x of d.docs||[]){ if(!x.id.startsWith("fab_"))continue; const blob=await (await fetch(x.data)).blob(); await docPut({id:x.id,nombre:x.nombre,tipo:x.tipo,data:blob}); }
     cats=[...new Set([...cats,...(d.cats||[])])];await cfgSet("cats",cats);
     equipos=await dbAll();llenarSelects();render();dMenu.close();alert("Respaldo restaurado.");
   }catch(err){alert("Archivo no válido.")}
