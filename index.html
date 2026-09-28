@@ -124,9 +124,11 @@
   <table class="det" id="dTabla" style="width:100%;border-collapse:collapse;margin-top:8px"></table>
   <div id="qrBox"></div>
   <div id="qrPie" style="text-align:center;font-size:.85rem;margin-top:-4px"></div>
+  <div id="dCerts"></div>
   <div class="acts">
     <button class="sec" onclick="descargarQR()">Descargar QR</button>
     <button class="sec" onclick="etiquetasPDF([actualEq()])">Etiqueta QR</button>
+    <button id="btnCertCal" onclick="abrirCertCal()">📜 Certificado de calibración</button>
     <button class="sec" id="btnCal" onclick="etiquetasCalPDF([actualEq()])">Etiqueta certificado</button>
     <button class="sec" onclick="fichaPDF()">Ficha PDF</button>
     <button class="sec" onclick="editar(actual)">Editar</button>
@@ -136,7 +138,7 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.10</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.11</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
@@ -188,6 +190,35 @@
     <button onclick="generarCal()">Generar PDF</button>
   </div>
 </div></dialog>
+
+<!-- Certificado de calibración -->
+<dialog id="dCC"><form class="dlg" onsubmit="emitirCertCal(event)">
+  <h2 id="ccTit">Certificado de calibración</h2>
+  <div class="grid2">
+    <div><label>N° de certificado *</label><input id="cc_num" required></div>
+    <div><label>Fecha de calibración *</label><input id="cc_fecha" type="date" required></div>
+    <div><label>Responsable *</label><input id="cc_resp" required placeholder="Nombre / laboratorio"></div>
+    <div><label>Lugar</label><input id="cc_lugar" placeholder="Laboratorio IQS, Concepción…"></div>
+    <div><label>Transductor utilizado</label><select id="cc_trans"></select></div>
+    <div><label>Velocidad de calibración (m/s)</label><input id="cc_vel" type="number" step="1" value="5920"></div>
+    <div><label>N° de serie del patrón *</label><input id="cc_patserie" required placeholder="Serie del bloque patrón"></div>
+    <div><label>Descripción del patrón</label><input id="cc_patron" placeholder="Bloque escalonado acero 1018, 2,5–12,5 mm"></div>
+    <div><label>Certificado del patrón</label><input id="cc_patcert" placeholder="N° cert. / vigencia"></div>
+    <div><label>Temperatura ambiente (°C)</label><input id="cc_temp" type="number" step="0.1" placeholder="20"></div>
+    <div><label>Tolerancia (± mm)</label><input id="cc_tol" type="number" step="0.01" min="0" value="0.1" oninput="ccCalc()"></div>
+  </div>
+  <h3>Resultados</h3>
+  <div class="hint">Nominal del bloque y hasta 3 lecturas por punto. El promedio, error y resultado se calculan solos.</div>
+  <div style="overflow-x:auto"><table id="ccTabla" style="width:100%;border-collapse:collapse;font-size:.85rem;margin-top:6px"></table></div>
+  <div class="acts" style="justify-content:flex-start;margin-top:6px"><button type="button" class="sec" onclick="ccFila()">+ Agregar punto</button></div>
+  <div id="ccRes" style="font-weight:600;margin-top:6px"></div>
+  <label>Observaciones</label><textarea id="cc_obs" rows="2"></textarea>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="cc_act" checked style="width:auto"> Actualizar en la ficha: fecha de calibración, responsable y N° de certificado</label>
+  <div class="acts">
+    <button type="button" class="sec" onclick="dCC.close()">Cancelar</button>
+    <button type="submit">Emitir y descargar PDF</button>
+  </div>
+</form></dialog>
 
 <!-- Informe PDF -->
 <dialog id="dInf"><div class="dlg">
@@ -335,7 +366,8 @@ function cargarFoto(inp){
 async function guardar(ev){
   ev.preventDefault();
   calcProx();
-  const e={id:actual||crypto.randomUUID(),foto:fotoTmp,act:new Date().toISOString()};
+  const prev=equipos.find(x=>x.id===actual)||{};
+  const e=Object.assign({},prev,{id:actual||crypto.randomUUID(),foto:fotoTmp,act:new Date().toISOString()});
   CAMPOS.forEach(c=>e[c]=document.getElementById("e_"+c).value.trim());
   if(equipos.some(x=>(x.serie||"").toLowerCase()===e.serie.toLowerCase()&&x.id!==e.id))
     return alert("Ya existe un equipo con ese número de serie.");
@@ -357,6 +389,11 @@ function ver(id){
     ["Responsable calibración",e.rcal],["Certificado",e.cert],["Equipo asociado",e.asoc],["Observaciones",e.obs]];
   dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1])}</td></tr>`).join("");
   btnCal.style.display=esMedidor(e)&&e.est==="Operativo"?"":"none";
+  btnCertCal.style.display=esMedidor(e)&&e.est!=="Dado de baja"?"":"none";
+  const cc=(e.certs||[]).slice().reverse();
+  dCerts.innerHTML=cc.length?`<h3>Certificados de calibración emitidos</h3>`+cc.map(c=>`<div class="catrow" style="font-size:.88rem;border-bottom:1px solid var(--gris);padding:4px 0">
+    <span><b>${esc(c.num)}</b> · ${fmt(c.fecha)} · <span style="color:${c.cumple?"var(--ok)":"var(--baja)"};font-weight:600">${c.cumple?"Conforme":"No conforme"}</span></span>
+    <button class="sec" style="padding:6px 10px" onclick="certCalPDF('${e.id}','${esc(c.num)}')">PDF</button></div>`).join(""):"";
   qrBox.innerHTML=""; new QRCode(qrBox,{text:urlEq(e.id),width:160,height:160,correctLevel:QRCode.CorrectLevel.M});
   qrPie.innerHTML=`<b>S/N ${esc(e.serie)}</b><br>`+lineasEtiqueta(e).map(esc).join("<br>");
   dDet.open||dDet.showModal();
@@ -397,6 +434,13 @@ function encabezado(doc,titulo){
   doc.setFontSize(14);doc.text(titulo,logoData?20+16*logoData.r:14,17);
   doc.setFontSize(9);doc.text("Fecha: "+fmt(hoy()),W-14,17,{align:"right"});
   doc.line(14,25,W-14,25);
+}
+
+function numerarPaginas(doc){
+  const n=doc.getNumberOfPages();
+  for(let p=1;p<=n;p++){doc.setPage(p);doc.setFontSize(8);doc.setTextColor(120);
+    doc.text(`Página ${p} de ${n}`,doc.internal.pageSize.getWidth()-14,doc.internal.pageSize.getHeight()-6,{align:"right"});}
+  doc.setTextColor(0);
 }
 
 /* ---------- Exportaciones ---------- */
@@ -619,6 +663,130 @@ function etqCert(doc,e,x,y,LW,LH){
   doc.setFont(undefined,"normal");doc.setFontSize(3.9);doc.setTextColor(60);
   doc.text("No retirar esta etiqueta",x+LW/2,y+LH-1.6,{align:"center"});
   doc.setTextColor(0);doc.setLineWidth(0.1);doc.setDrawColor(150);
+}
+
+/* ---------- Certificado de calibración (medidores de espesor) ---------- */
+const PUNTOS_DEF=["2.5","5","7.5","10","12.5"];
+const PATRON_DEF="Bloque escalonado acero 1018, 2,5–12,5 mm";
+async function sigNumCert(){
+  const an=hoy().slice(0,4),k="certSeq_"+an;let n=(await cfgGet(k))||0;
+  const usados=new Set(equipos.flatMap(e=>(e.certs||[]).map(c=>c.num)));
+  let num;do{n++;num=`IQS-CAL-${an}-${String(n).padStart(3,"0")}`}while(usados.has(num));
+  return {num,n,k};
+}
+async function abrirCertCal(){
+  const e=actualEq(),u=(e.certs||[]).slice(-1)[0]||{};
+  ccTit.textContent=`Certificado de calibración — S/N ${e.serie}`;
+  cc_num.value=(await sigNumCert()).num;
+  cc_fecha.value=hoy();cc_resp.value=e.rcal||u.resp||"";cc_lugar.value=u.lugar||"";
+  cc_vel.value=u.vel||"5920";cc_patserie.value=u.patserie||"";cc_patron.value=u.patron||PATRON_DEF;cc_patcert.value=u.patcert||"";cc_temp.value="";cc_tol.value=u.tol||"0.1";cc_obs.value="";
+  const trans=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja");
+  const asoc=trans.find(t=>(t.asoc||"").toLowerCase()===e.serie.toLowerCase());
+  cc_trans.innerHTML='<option value="">— Sin especificar —</option>'+trans.map(t=>`<option value="${t.id}">S/N ${esc(t.serie)} · ${esc([t.marca,t.modelo].filter(Boolean).join(" "))} · ${esc([txtFrec(t),txtDiam(t)].filter(Boolean).join(" / "))}</option>`).join("");
+  cc_trans.value=u.transId&&trans.some(t=>t.id===u.transId)?u.transId:asoc?asoc.id:"";
+  ccTabla.innerHTML=`<tr style="text-align:left;color:var(--txt)"><th>Nominal (mm)</th><th>Lect. 1</th><th>Lect. 2</th><th>Lect. 3</th><th>Prom.</th><th>Error</th><th></th><th></th></tr>`;
+  (u.puntos&&u.puntos.length?u.puntos.map(p=>p.nom):PUNTOS_DEF).forEach(n=>ccFila(n));
+  ccCalc();dDet.close();dCC.showModal();
+}
+function ccFila(nom=""){
+  const tr=document.createElement("tr");
+  const inp=(c,v="")=>`<td><input class="${c}" type="number" step="0.01" inputmode="decimal" value="${v}" oninput="ccCalc()" style="padding:6px;min-width:62px"></td>`;
+  tr.innerHTML=inp("n",nom)+inp("l1")+inp("l2")+inp("l3")+`<td class="pr"></td><td class="er"></td><td class="ok"></td><td><button type="button" class="del" style="padding:4px 8px" onclick="this.closest('tr').remove();ccCalc()">✕</button></td>`;
+  ccTabla.appendChild(tr);
+}
+function ccPuntos(){
+  const tol=parseFloat(cc_tol.value)||0;
+  return [...ccTabla.querySelectorAll("tr")].slice(1).map(tr=>{
+    const g=c=>tr.querySelector("."+c).value.trim();
+    const nom=g("n"),ls=[g("l1"),g("l2"),g("l3")].filter(v=>v!=="").map(Number);
+    if(nom===""||!ls.length)return {tr,nom,ls,vacio:true};
+    const prom=ls.reduce((a,b)=>a+b,0)/ls.length,err=prom-parseFloat(nom),ok=Math.abs(err)<=tol+1e-9;
+    return {tr,nom,ls,prom,err,ok};
+  });
+}
+function ccCalc(){
+  const ps=ccPuntos();
+  ps.forEach(p=>{
+    p.tr.querySelector(".pr").textContent=p.vacio?"":p.prom.toFixed(2);
+    p.tr.querySelector(".er").textContent=p.vacio?"":(p.err>=0?"+":"")+p.err.toFixed(2);
+    p.tr.querySelector(".ok").innerHTML=p.vacio?"":p.ok?'<span style="color:var(--ok)">✔</span>':'<span class="venc">✖</span>';
+  });
+  const v=ps.filter(p=>!p.vacio);
+  ccRes.innerHTML=!v.length?"":v.every(p=>p.ok)?`<span style="color:var(--ok)">Resultado: CONFORME (${v.length} puntos dentro de ±${cc_tol.value} mm)</span>`
+    :`<span class="venc">Resultado: NO CONFORME (${v.filter(p=>!p.ok).length} de ${v.length} puntos fuera de tolerancia)</span>`;
+}
+async function emitirCertCal(ev){
+  ev.preventDefault();
+  const e=actualEq(),v=ccPuntos().filter(p=>!p.vacio);
+  if(!v.length)return alert("Ingresa al menos un punto con su valor nominal y una lectura.");
+  const num=cc_num.value.trim();
+  if(equipos.some(x=>(x.certs||[]).some(c=>c.num===num)))return alert("Ya existe un certificado con ese número.");
+  const t=equipos.find(x=>x.id===cc_trans.value);
+  const c={num,fecha:cc_fecha.value,prox:sumarMeses(cc_fecha.value,MESES_CAL),resp:cc_resp.value.trim(),lugar:cc_lugar.value.trim(),
+    transId:t?t.id:"",trans:t?`S/N ${t.serie} · ${[t.marca,t.modelo].filter(Boolean).join(" ")} · ${[txtFrec(t),txtDiam(t)].filter(Boolean).join(" / ")}`:"",
+    vel:cc_vel.value,patserie:cc_patserie.value.trim(),patron:cc_patron.value.trim(),patcert:cc_patcert.value.trim(),temp:cc_temp.value,tol:cc_tol.value,
+    puntos:v.map(p=>({nom:p.nom,ls:p.ls,prom:+p.prom.toFixed(3),err:+p.err.toFixed(3),ok:p.ok})),cumple:v.every(p=>p.ok),
+    obs:cc_obs.value.trim(),emitido:new Date().toISOString()};
+  e.certs=[...(e.certs||[]),c];
+  if(cc_act.checked){e.fcal=c.fecha;e.fprox=c.prox;e.rcal=c.resp;e.cert=c.num;}
+  e.act=new Date().toISOString();
+  await dbPut(e);
+  const sq=await sigNumCert(),m=num.match(/^IQS-CAL-(\d{4})-(\d+)$/);
+  if(m)await cfgSet("certSeq_"+m[1],Math.max(parseInt(m[2]),(await cfgGet("certSeq_"+m[1]))||0));
+  equipos=await dbAll();dCC.close();render();
+  certCalPDF(e.id,num);ver(e.id);
+}
+const fechaLocalISO=iso=>{const d=new Date(iso);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+function certCalPDF(id,num){
+  const e=equipos.find(x=>x.id===id),c=(e.certs||[]).find(x=>x.num===num); if(!c)return;
+  const {jsPDF}=window.jspdf,doc=new jsPDF(),W=doc.internal.pageSize.getWidth(),AZ=[11,61,107];
+  // Encabezado
+  if(logoData)doc.addImage(logoData.d,"PNG",14,9,20*logoData.r,20);
+  doc.setFont(undefined,"bold");doc.setFontSize(16);doc.setTextColor(...AZ);
+  doc.text("CERTIFICADO DE CALIBRACIÓN",W-14,17,{align:"right"});
+  doc.setFontSize(10);doc.setTextColor(0);doc.text("N° "+c.num,W-14,23.5,{align:"right"});
+  doc.setFont(undefined,"normal");doc.setFontSize(8.5);doc.text("Medidor de espesores por ultrasonido",W-14,28.5,{align:"right"});
+  doc.setDrawColor(...AZ);doc.setLineWidth(0.6);doc.line(14,32,W-14,32);
+  const sec=(t,y)=>{doc.setFont(undefined,"bold");doc.setFontSize(10.5);doc.setTextColor(...AZ);doc.text(t,14,y);doc.setTextColor(0);doc.setFont(undefined,"normal");return y+2;};
+  const tabla=(y,filas)=>{doc.autoTable({startY:y,body:filas,theme:"grid",styles:{fontSize:9,cellPadding:1.8},
+    columnStyles:{0:{fontStyle:"bold",cellWidth:45,fillColor:[242,244,247]},2:{fontStyle:"bold",cellWidth:40,fillColor:[242,244,247]}},margin:{left:14,right:14}});return doc.lastAutoTable.finalY+7;};
+  let y=sec("1. Identificación del equipo",40);
+  y=tabla(y,[["Equipo",{content:"Medidor de espesores por ultrasonido",colSpan:3}],["Marca",e.marca||"—","Modelo",e.modelo||"—"],["N° de serie",{content:e.serie,colSpan:3}],["Transductor utilizado",{content:c.trans||"—",colSpan:3}]]);
+  y=sec("2. Condiciones de calibración",y);
+  y=tabla(y,[["Fecha de calibración",fmt(c.fecha),"Próxima calibración",fmt(c.prox)],["Lugar",c.lugar||"—","Temperatura ambiente",c.temp?c.temp+" °C":"—"],
+    ["N° de serie patrón",c.patserie||"—","Certificado patrón",c.patcert||"—"],["Descripción patrón",{content:c.patron||"—",colSpan:3}],["Velocidad de calibración",c.vel?c.vel+" m/s":"—","Tolerancia",`± ${c.tol} mm`]]);
+  y=sec("3. Resultados",y);
+  const nL=Math.max(...c.puntos.map(p=>p.ls.length));
+  const head=["Nominal (mm)",...Array.from({length:nL},(_,i)=>`Lectura ${i+1} (mm)`),"Promedio (mm)","Error (mm)","Resultado"];
+  doc.autoTable({startY:y,head:[head],body:c.puntos.map(p=>[p.nom,...Array.from({length:nL},(_,i)=>p.ls[i]!=null?p.ls[i].toFixed(2):"—"),p.prom.toFixed(2),(p.err>=0?"+":"")+p.err.toFixed(2),p.ok?"Conforme":"No conforme"]),
+    theme:"grid",styles:{fontSize:9,halign:"center",cellPadding:1.8},headStyles:{fillColor:AZ,halign:"center"},margin:{left:14,right:14},
+    didParseCell:d=>{if(d.section==="body"&&d.column.index===head.length-1)d.cell.styles.textColor=d.cell.raw==="Conforme"?[18,129,59]:[180,35,24]}});
+  y=doc.lastAutoTable.finalY+8;
+  y=sec("4. Conclusión",y);
+  doc.setFillColor(...(c.cumple?[230,246,236]:[254,228,226]));doc.setDrawColor(...(c.cumple?[18,129,59]:[180,35,24]));doc.setLineWidth(0.4);
+  doc.roundedRect(14,y,W-28,13,1.5,1.5,"FD");
+  doc.setFont(undefined,"bold");doc.setFontSize(10.5);doc.setTextColor(...(c.cumple?[18,129,59]:[180,35,24]));
+  doc.text(c.cumple?"EQUIPO CONFORME":"EQUIPO NO CONFORME",W/2,y+5.5,{align:"center"});
+  doc.setFont(undefined,"normal");doc.setFontSize(8.5);doc.setTextColor(0);
+  doc.text(c.cumple?`Todos los puntos verificados se encuentran dentro de la tolerancia de ± ${c.tol} mm.`
+    :`${c.puntos.filter(p=>!p.ok).length} de ${c.puntos.length} puntos se encuentran fuera de la tolerancia de ± ${c.tol} mm.`,W/2,y+10,{align:"center"});
+  y+=20;
+  if(c.obs){y=sec("Observaciones",y);doc.setFontSize(9);const t=doc.splitTextToSize(c.obs,W-28);doc.text(t,14,y+3);y+=t.length*4.2+6;}
+  // Firmas
+  const H=doc.internal.pageSize.getHeight();let yf=Math.max(y+18,H-48);
+  if(yf>H-30){doc.addPage();yf=50;}
+  const cw=(W-28-20)/2;
+  [["Realizado por",c.resp],["Revisado / aprobado por",""]].forEach(([t,n],i)=>{
+    const x=14+i*(cw+20);doc.setDrawColor(0);doc.setLineWidth(0.3);doc.line(x,yf,x+cw,yf);
+    doc.setFontSize(9);doc.setFont(undefined,"bold");doc.text(t,x+cw/2,yf+5,{align:"center"});
+    doc.setFont(undefined,"normal");doc.text(n||"Nombre y firma",x+cw/2,yf+9.5,{align:"center"});
+  });
+  // Pie con QR
+  doc.addImage(qrDataURL(urlEq(e.id),200),"PNG",14,H-24,16,16);
+  doc.setFontSize(7.5);doc.setTextColor(110);
+  doc.text([`Certificado N° ${c.num} · Emitido el ${fmt(fechaLocalISO(c.emitido))}`,"Este certificado es válido solo para el equipo identificado y las condiciones descritas.","Escanee el código QR para ver la ficha del equipo."],33,H-18);
+  numerarPaginas(doc);
+  doc.save(`Certificado_calibracion_${c.num}_${e.serie}_${fmt(fechaLocalISO(c.emitido))}.pdf`);
 }
 
 /* ---------- Gráficos ---------- */
