@@ -1,7 +1,7 @@
-const CACHE = "inventario-v1.14";
+const CACHE = "inventario-v1.19";
 const CDN = ["cdnjs.cloudflare.com", "cdn.jsdelivr.net", "www.gstatic.com"];
 const ARCHIVOS = [
-  "./", "index.html", "sync.js", "firebase-config.js", "manifest.json", "icon-192.png", "icon-512.png", "logo-iqs.png",
+  "./", "index.html", "sync.js", "firebase-config.js", "manifest.json", "icon-192.png", "icon-512.png", "logo-iqs.png", "logo-iqs-sello.png", "logo-iqs-hd.png",
   "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
   "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
   "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
