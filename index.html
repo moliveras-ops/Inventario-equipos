@@ -71,12 +71,15 @@
   .pgrp a{color:var(--azul2)}
   .seg{display:flex;gap:6px}.seg button{flex:1}
   .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.9rem;color:var(--txt)}.chk input{width:auto}
-  #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:none;align-items:center;justify-content:center;padding:16px}
+  #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:flex;align-items:center;justify-content:center;padding:16px}
   #login .box{background:#fff;border-radius:14px;padding:24px 20px;width:min(380px,100%);box-shadow:0 10px 30px #0006}
   #login img{display:block;height:56px;margin:0 auto 10px}
   #login h2{text-align:center;margin:0 0 4px;font-size:1.2rem;color:var(--azul)}
   #login p{text-align:center;margin:0 0 12px;font-size:.85rem;color:#667085}
   #login button{width:100%;margin-top:14px;padding:12px}
+  #lgEspera{text-align:center;padding:18px 0 6px;color:var(--azul);font-weight:600}
+  #lgEspera i{display:block;width:34px;height:34px;margin:0 auto 10px;border:4px solid var(--gris);border-top-color:var(--azul2);border-radius:50%;animation:gira .9s linear infinite}
+  @keyframes gira{to{transform:rotate(360deg)}}
   #lgMsg{min-height:1.2em;font-size:.85rem;margin-top:10px;text-align:center}
   #login .lnk{display:block;text-align:center;margin-top:12px;font-size:.85rem;color:var(--azul2)}
   @media(max-width:520px){.grid2{grid-template-columns:1fr}}
@@ -87,13 +90,15 @@
 <div id="login"><form class="box" onsubmit="loginEntrar(event)">
   <img src="logo-iqs.png" alt="IQS" onerror="this.style.display='none'">
   <h2>Inventario Equipos</h2>
-  <p>Inicia sesión para ver y editar el inventario</p>
+  <div id="lgEspera"><i></i><span id="lgEsperaTxt">Verificando sesión…</span></div>
+  <div id="lgCampos" style="display:none">
+  <p>Acceso restringido. Inicia sesión para ver y editar el inventario.</p>
   <label>Correo</label><input id="lg_mail" type="email" required autocomplete="username" inputmode="email">
   <label>Contraseña</label><input id="lg_pass" type="password" required autocomplete="current-password">
   <button type="submit" id="lgBtn">Iniciar sesión</button>
-  <div id="lgMsg"></div>
   <a href="#" class="lnk" onclick="loginRecuperar();return false">¿Olvidaste tu contraseña?</a>
-  <a href="#" class="lnk" id="lgSin" style="display:none;color:#667085" onclick="loginOcultar(true);return false">Continuar sin conexión (solo datos de este dispositivo)</a>
+  </div>
+  <div id="lgMsg"></div>
 </form></div>
 
 <header>
@@ -185,7 +190,7 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.16</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.17</small></h2>
   <div style="display:grid;gap:8px">
     <button onclick="abrirPrestamos()">🔁 Préstamos y devoluciones</button>
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
@@ -464,11 +469,8 @@ window.InvApp={
     if(dPres.open)pintarPres();
     if(dFirmas.open)pintarFirmas();
   },
-  sesion(email){              // null = sin sesión · undefined = nube no disponible
-    if(email){loginOcultar();return;}
-    if(email===null&&!sinSesion){login.style.display="flex";lgSin.style.display="none";setTimeout(()=>lg_mail.focus(),50);}
-    else if(email===undefined&&login.style.display==="flex")lgSin.style.display="block";
-  },
+  sesion(email){sesionCambio(email);},     // email = con sesión · null = sin sesión · undefined = nube no disponible
+  listo(){if(esperandoDatos)finEspera();},
   estadoSync(txt,tipo){
     syncTxt.textContent=txt;
     syncIco.textContent={ok:"☁️",sync:"🔄",err:"⚠️",off:"☁️"}[tipo]||"☁️";
@@ -485,11 +487,11 @@ window.InvApp={
   // Migración de versión anterior: si no había serie, usar el código interno
   for(const e of equipos){ if(!e.serie && e.cod){ e.serie=e.cod; await dbPut(e); } }
   llenarSelects(); render();
-  const m = location.hash.match(/eq=([^&]+)/);
-  if(m) ver(decodeURIComponent(m[1]));
+  dbListo();
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(r=>r&&r.update()).catch(()=>{});
 })();
-window.addEventListener("hashchange",()=>{const m=location.hash.match(/eq=([^&]+)/);if(m)ver(decodeURIComponent(m[1]))});
+window.addEventListener("hashchange",abrirHash);
+function abrirHash(){if(!autorizado)return;const m=location.hash.match(/eq=([^&]+)/);if(m)ver(decodeURIComponent(m[1]));}
 
 const opts=(arr,todos)=>(todos?`<option value="">${todos}</option>`:"")+arr.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
 function llenarSelects(){
@@ -532,6 +534,7 @@ function filtrados(){
     .sort((a,b)=>(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
 }
 function render(){
+  if(!autorizado){lista.innerHTML="";stats.innerHTML="";pAviso.style.display="none";pBdg.style.display="none";return;}
   const l=filtrados();
   const pend=equipos.filter(e=>prestActivo(e)),atr=pend.filter(e=>prestVencido(prestActivo(e)));
   pBdg.textContent=pend.length;pBdg.style.display=pend.length?"block":"none";pBdg.style.background=atr.length?"var(--baja)":"#6941c6";
@@ -613,6 +616,7 @@ async function verFab(){
 /* ---------- Detalle y QR ---------- */
 const urlEq=id=>location.origin+location.pathname+"#eq="+encodeURIComponent(id);
 function ver(id){
+  if(!autorizado)return;
   const e=equipos.find(x=>x.id===id||x.serie===id); if(!e)return;
   actual=e.id; dTit.textContent=`S/N ${e.serie} — ${e.cat}`;
   dFoto.src=e.foto||""; dFoto.style.display=e.foto?"block":"none";
@@ -1346,24 +1350,55 @@ function excelPrestamos(){
 }
 
 /* ---------- Pantalla de inicio de sesión ---------- */
-let sinSesion=false;
-function loginOcultar(sin){if(sin)sinSesion=true;login.style.display="none";lgMsg.textContent="";lg_pass.value="";}
+// Sin sesión válida no se muestra ningún dato. Al cerrar sesión se borra la copia local del dispositivo.
+let autorizado=false,esperandoDatos=false,dbListo,sesionResuelta=false;
+const dbAbierta=new Promise(r=>dbListo=r);
+setTimeout(()=>{if(!sesionResuelta)sesionCambio(undefined)},10000);   // la nube no respondió
+function lgEstado(txt){lgEspera.style.display=txt?"":"none";lgEsperaTxt.textContent=txt||"";lgCampos.style.display=txt?"none":"";}
+function lgMensaje(txt,ok){lgMsg.style.color=ok?"var(--ok)":"var(--baja)";lgMsg.textContent=txt||"";}
+async function sesionCambio(email){
+  sesionResuelta=true;await dbAbierta;
+  if(email){
+    await cfgSetL("_sesion",email);
+    autorizado=true;lg_pass.value="";lgMensaje("");
+    equipos=await dbAll();cats=(await cfgGet("cats"))||cats;await cargarFirmas();llenarSelects();render();
+    if(!equipos.length){esperandoDatos=true;lgEstado("Descargando inventario…");setTimeout(finEspera,15000);}
+    else login.style.display="none";
+    abrirHash();
+    return;
+  }
+  const previa=await cfgGet("_sesion");
+  if(email===undefined&&previa){                 // sin señal, pero este dispositivo ya tenía sesión: se trabaja con la copia local
+    autorizado=true;login.style.display="none";render();abrirHash();return;
+  }
+  autorizado=false;render();[dDet,dForm,dPres,dPNew,dPDev,dMenu,dSync].forEach(d=>d.open&&d.close());
+  if(email===null&&previa)await borrarLocal();   // la sesión se cerró o expiró: no dejar datos en el teléfono
+  login.style.display="flex";lgEstado("");
+  if(email===undefined)lgMensaje("Sin conexión. El primer ingreso en este dispositivo requiere internet.");
+  setTimeout(()=>lg_mail.focus(),50);
+}
+function finEspera(){if(!esperandoDatos)return;esperandoDatos=false;login.style.display="none";lgEstado("");abrirHash();}
+async function borrarLocal(){
+  for(const s of ["equipos","docs","config"])await req(tx(s,"readwrite").clear());
+  equipos=[];cats=CATS_DEF.slice();firmas=[];
+}
 const msgAuth=e=>/invalid|wrong|not-found|user-disabled/.test(e.code||"")?"Correo o contraseña incorrectos.":
   /too-many/.test(e.code||"")?"Demasiados intentos. Espera unos minutos.":
   /network/.test(e.code||"")?"Sin conexión a internet.":(e.code||e.message);
 async function loginEntrar(ev){
   ev.preventDefault();
-  if(!window.Sync){lgMsg.style.color="var(--baja)";lgMsg.textContent="Sin conexión con el servidor. Revisa tu señal.";lgSin.style.display="block";return;}
-  lgBtn.disabled=true;lgBtn.textContent="Ingresando…";lgMsg.textContent="";
+  if(!window.Sync)return lgMensaje("Sin conexión con el servidor. Revisa tu señal e intenta de nuevo.");
+  lgBtn.disabled=true;lgBtn.textContent="Ingresando…";lgMensaje("");
   try{await Sync.entrar(lg_mail.value.trim(),lg_pass.value);}
-  catch(e){lgMsg.style.color="var(--baja)";lgMsg.textContent=msgAuth(e);if(/network/.test(e.code||""))lgSin.style.display="block";}
+  catch(e){lgMensaje(msgAuth(e));}
   lgBtn.disabled=false;lgBtn.textContent="Iniciar sesión";
 }
 async function loginRecuperar(){
   const m=lg_mail.value.trim();
-  if(!m){lgMsg.style.color="var(--baja)";lgMsg.textContent="Escribe tu correo y vuelve a tocar el enlace.";return lg_mail.focus();}
-  try{await Sync.recuperar(m);lgMsg.style.color="var(--ok)";lgMsg.textContent="Te enviamos un correo para restablecer la contraseña.";}
-  catch(e){lgMsg.style.color="var(--baja)";lgMsg.textContent=msgAuth(e);}
+  if(!m){lgMensaje("Escribe tu correo y vuelve a tocar el enlace.");return lg_mail.focus();}
+  if(!window.Sync)return lgMensaje("Sin conexión con el servidor.");
+  try{await Sync.recuperar(m);lgMensaje("Te enviamos un correo para restablecer la contraseña.",true);}
+  catch(e){lgMensaje(msgAuth(e));}
 }
 
 /* ---------- Sincronización ---------- */
@@ -1379,7 +1414,11 @@ async function entrarSync(){
   try{await Sync.entrar(s_mail.value.trim(),s_pass.value);s_pass.value="";}
   catch(e){alert("No se pudo iniciar sesión: "+(/invalid|wrong|not-found/.test(e.code)?"correo o contraseña incorrectos.":e.code||e.message));}
 }
-async function salirSync(){if(confirm("¿Cerrar sesión? Deberás volver a ingresar con tu correo y contraseña."))dSync.close(),sinSesion=false,await Sync.salir();}
+async function salirSync(){
+  if(!confirm("¿Cerrar sesión?\n\nSe borrarán los datos guardados en este dispositivo (quedan seguros en la nube) y habrá que volver a ingresar con correo y contraseña."))return;
+  try{await Sync.salir();dSync.close();}
+  catch(e){alert(e.code==="pendientes"?"Hay cambios que aún no se suben a la nube. Conéctate a internet y vuelve a intentar para no perderlos.":"No se pudo cerrar sesión: "+(e.code||e.message));}
+}
 
 /* ---------- Menú, categorías, respaldo ---------- */
 function abrirMenu(){dMenu.showModal()}

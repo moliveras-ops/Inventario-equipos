@@ -12,7 +12,7 @@ let fs, auth, F, A, usuario = null, desuscribir = [], primeraCarga = {};
 function estado(txt, tipo) { App.estadoSync(txt, tipo); }
 
 async function iniciar() {
-  if (!cfg || !cfg.apiKey || cfg.apiKey.startsWith("PEGAR")) { estado("Sincronización no configurada", "off"); return; }
+  if (!cfg || !cfg.apiKey || cfg.apiKey.startsWith("PEGAR")) { estado("Sincronización no configurada", "off"); App.sesion(undefined); return; }
   try {
     const [fa, fau, ffs] = await Promise.all([
       import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
@@ -76,6 +76,7 @@ async function alRecibir(col, snap) {
       for (const id of await App.local.pendBorr()) borrarEquipo(id);
       await App.local.pendBorr([]);
     }
+    if (!snap.metadata.fromCache) App.listo();
     const pend = snap.metadata.hasPendingWrites;
     estado(pend ? "Cambios pendientes de subir (sin señal)" : "Sincronizado ✓", pend ? "sync" : "ok");
   }
@@ -167,7 +168,15 @@ window.Sync = {
   get email() { return usuario && usuario.email; },
   get configurado() { return !!(cfg && cfg.apiKey && !cfg.apiKey.startsWith("PEGAR")); },
   async entrar(email, clave) { await A.signInWithEmailAndPassword(auth, email, clave); },
-  async salir() { await A.signOut(auth); },
+  async salir() {
+    // no cerrar con cambios sin subir; luego se borra la caché de Firestore del dispositivo
+    const subido = await Promise.race([F.waitForPendingWrites(fs).then(() => true), new Promise(r => setTimeout(() => r(false), 6000))]);
+    if (!subido) throw { code: "pendientes" };
+    desconectar();
+    await A.signOut(auth);
+    try { await F.terminate(fs); await F.clearIndexedDbPersistence(fs); } catch (e) { console.warn("Sync:", e); }
+    setTimeout(() => location.reload(), 300);
+  },
   async recuperar(email) { await A.sendPasswordResetEmail(auth, email); },
   forzar() { if (usuario) conectar(); }
 };
