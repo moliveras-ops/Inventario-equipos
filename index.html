@@ -58,13 +58,48 @@
   .vcol i{display:block;width:70%;background:var(--azul2);border-radius:4px 4px 0 0;min-height:3px}
   .vlbl{display:flex;gap:10px;padding:4px 4px 0;overflow-x:auto}
   .vlbl span{flex:1;min-width:46px;max-width:90px;font-size:.72rem;text-align:center;line-height:1.15;word-break:break-word;color:#475467}
+  .prest{background:#6941c6}.prest.atr{background:var(--baja)}
+  .card.pend{border-left:6px solid #6941c6}.card.pend.atr{border-left-color:var(--baja)}
+  .bdg{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:var(--baja);color:#fff;font-size:.72rem;font-weight:700;line-height:19px;text-align:center;display:none}
+  .aviso{background:#f4f0ff;border:1px solid #6941c6;color:#3e1c96;border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:.9rem;cursor:pointer;display:none}
+  .aviso.atr{background:#fef3f2;border-color:var(--baja);color:#912018}
+  .sig{width:100%;height:150px;border:1px dashed var(--borde);border-radius:8px;background:#fff;touch-action:none;display:block}
+  .plist{max-height:260px;overflow:auto;border:1px solid var(--borde);border-radius:8px;padding:2px 8px;background:#fff}
+  .plist label{display:flex;gap:8px;align-items:center;margin:0;padding:7px 0;border-bottom:1px solid var(--gris);font-size:.9rem;color:var(--txt)}
+  .plist input{width:auto;flex-shrink:0}
+  .pgrp{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:10px;margin-bottom:8px}
+  .pgrp a{color:var(--azul2)}
+  .seg{display:flex;gap:6px}.seg button{flex:1}
+  .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.9rem;color:var(--txt)}.chk input{width:auto}
+  #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:none;align-items:center;justify-content:center;padding:16px}
+  #login .box{background:#fff;border-radius:14px;padding:24px 20px;width:min(380px,100%);box-shadow:0 10px 30px #0006}
+  #login img{display:block;height:56px;margin:0 auto 10px}
+  #login h2{text-align:center;margin:0 0 4px;font-size:1.2rem;color:var(--azul)}
+  #login p{text-align:center;margin:0 0 12px;font-size:.85rem;color:#667085}
+  #login button{width:100%;margin-top:14px;padding:12px}
+  #lgMsg{min-height:1.2em;font-size:.85rem;margin-top:10px;text-align:center}
+  #login .lnk{display:block;text-align:center;margin-top:12px;font-size:.85rem;color:var(--azul2)}
   @media(max-width:520px){.grid2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
+<!-- Inicio de sesión -->
+<div id="login"><form class="box" onsubmit="loginEntrar(event)">
+  <img src="logo-iqs.png" alt="IQS" onerror="this.style.display='none'">
+  <h2>Inventario Equipos</h2>
+  <p>Inicia sesión para ver y editar el inventario</p>
+  <label>Correo</label><input id="lg_mail" type="email" required autocomplete="username" inputmode="email">
+  <label>Contraseña</label><input id="lg_pass" type="password" required autocomplete="current-password">
+  <button type="submit" id="lgBtn">Iniciar sesión</button>
+  <div id="lgMsg"></div>
+  <a href="#" class="lnk" onclick="loginRecuperar();return false">¿Olvidaste tu contraseña?</a>
+  <a href="#" class="lnk" id="lgSin" style="display:none;color:#667085" onclick="loginOcultar(true);return false">Continuar sin conexión (solo datos de este dispositivo)</a>
+</form></div>
+
 <header>
   <img src="logo-iqs.png" alt="IQS" onerror="this.style.display='none'">
   <h1>Inventario Equipos</h1>
+  <button class="sec" onclick="abrirPrestamos()" title="Préstamos" style="position:relative">🔁<span class="bdg" id="pBdg"></span></button>
   <button class="sec" onclick="abrirInforme()" title="Informe PDF">📄</button>
   <button class="sec" onclick="abrirGraficos()" title="Gráficos">📈</button>
   <button class="sec" onclick="abrirCats()" title="Categorías">🗂️</button>
@@ -78,6 +113,7 @@
     <select id="fCat" onchange="render()"></select>
     <select id="fEst" onchange="render()"></select>
   </div>
+  <div class="aviso" id="pAviso" onclick="fEst.value='__prest';render()"></div>
   <div class="stats" id="stats"></div>
   <div id="lista"></div>
 </main>
@@ -133,6 +169,7 @@
   <table class="det" id="dTabla" style="width:100%;border-collapse:collapse;margin-top:8px"></table>
   <div id="qrBox"></div>
   <div id="qrPie" style="text-align:center;font-size:.85rem;margin-top:-4px"></div>
+  <div id="dPrest"></div>
   <div id="dCerts"></div>
   <div class="acts">
     <button class="sec" onclick="descargarQR()">Descargar QR</button>
@@ -148,8 +185,9 @@
 
 <!-- Menú -->
 <dialog id="dMenu"><div class="dlg">
-  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.14</small></h2>
+  <h2>Opciones <small style="font-weight:normal;color:#667085;font-size:.75rem">versión 1.16</small></h2>
   <div style="display:grid;gap:8px">
+    <button onclick="abrirPrestamos()">🔁 Préstamos y devoluciones</button>
     <button onclick="exportarExcel()">📊 Exportar Excel</button>
     <button onclick="abrirInforme()">📄 Informe PDF (con filtros)</button>
     <button onclick="abrirEtiquetas()">🏷️ Etiquetas QR por categoría (PDF)</button>
@@ -308,6 +346,67 @@
   <div class="acts"><button onclick="dGraf.close()">Cerrar</button></div>
 </div></dialog>
 
+<!-- Préstamos -->
+<dialog id="dPres"><div class="dlg">
+  <h2>🔁 Préstamos y devoluciones</h2>
+  <div class="seg"><button id="pTabA" onclick="pVista='act';pintarPres()">En préstamo</button><button id="pTabH" class="sec" onclick="pVista='hist';pintarPres()">Historial</button></div>
+  <input id="pQ" placeholder="Buscar persona, destino, N° de serie…" oninput="pintarPres()" style="margin-top:8px">
+  <div class="stats" id="pStats" style="margin-top:8px"></div>
+  <div id="pLista"></div>
+  <div class="acts">
+    <button class="sec" onclick="excelPrestamos()">📊 Excel</button>
+    <button class="sec" onclick="dPres.close()">Cerrar</button>
+    <button onclick="nuevoPrestamo()">+ Nuevo préstamo</button>
+  </div>
+</div></dialog>
+
+<!-- Nuevo préstamo -->
+<dialog id="dPNew"><form class="dlg" onsubmit="guardarPrestamo(event)">
+  <h2>Nuevo préstamo</h2>
+  <div class="grid2">
+    <div><label>Retirado por (nombre) *</label><input id="p_quien" required list="dlQuien" autocomplete="off"></div>
+    <div><label>Empresa / área</label><input id="p_emp" list="dlEmp" autocomplete="off"></div>
+    <div><label>Destino (planta, obra, OT) *</label><input id="p_dest" required list="dlDest" autocomplete="off"></div>
+    <div><label>Entregado por</label><input id="p_entrega" list="dlEntrega" autocomplete="off"></div>
+    <div><label>Fecha de salida *</label><input id="p_sal" type="date" required></div>
+    <div><label>Devolución comprometida</label><input id="p_comp" type="date"></div>
+  </div>
+  <h3>Equipos a prestar</h3>
+  <input id="p_q" placeholder="Filtrar por serie, marca, modelo, frecuencia…" oninput="pintarPSel()">
+  <div class="hint">Solo equipos en estado Operativo que no estén prestados.</div>
+  <div class="plist" id="pSel" style="margin-top:6px"></div>
+  <div class="hint" id="pCuenta" style="font-weight:600;font-size:.82rem"></div>
+  <label>Observaciones (accesorios, estado al salir)</label><textarea id="p_obs" rows="2" placeholder="Maletín, cable, bloque de calibración, acoplante…"></textarea>
+  <label>Firma de quien retira</label>
+  <canvas id="p_firma" class="sig"></canvas>
+  <div class="acts" style="justify-content:flex-start;margin-top:4px"><button type="button" class="sec" onclick="iniciarFirma()">Borrar firma</button></div>
+  <label class="chk"><input type="checkbox" id="p_acta" checked> Descargar acta de préstamo (PDF)</label>
+  <div class="acts">
+    <button type="button" class="sec" onclick="dPNew.close()">Cancelar</button>
+    <button type="submit">Registrar préstamo</button>
+  </div>
+</form></dialog>
+
+<!-- Devolución -->
+<dialog id="dPDev"><form class="dlg" onsubmit="guardarDevolucion(event)">
+  <h2>Registrar devolución</h2>
+  <div id="dvInfo" style="font-size:.9rem;margin-bottom:8px"></div>
+  <label>Equipos devueltos</label>
+  <div class="plist" id="dvSel"></div>
+  <div class="grid2">
+    <div><label>Fecha de devolución *</label><input id="dv_fecha" type="date" required></div>
+    <div><label>Recibido por *</label><input id="dv_recibe" required list="dlEntrega" autocomplete="off"></div>
+    <div><label>Condición</label><select id="dv_cond"><option>Buen estado</option><option>Con observaciones</option><option>Dañado</option></select></div>
+  </div>
+  <label>Observaciones</label><textarea id="dv_obs" rows="2"></textarea>
+  <label class="chk"><input type="checkbox" id="dv_rep" checked> Si está dañado, cambiar estado a "En reparación"</label>
+  <div class="acts">
+    <button type="button" class="sec" onclick="dPDev.close()">Cancelar</button>
+    <button type="submit">Registrar devolución</button>
+  </div>
+</form></dialog>
+<datalist id="dlQuien"></datalist><datalist id="dlEmp"></datalist><datalist id="dlDest"></datalist><datalist id="dlEntrega"></datalist>
+
 <script>
 const ESTADOS = ["Operativo","En calibración","En reparación","Dado de baja"];
 const CATS_DEF = ["Medidor de espesor","Transductor","Yugo magnético"];
@@ -362,7 +461,13 @@ window.InvApp={
     llenarSelects();render();
     if(dDet.open&&actual)ver(actual);
     if(dCats.open)pintarCats();
+    if(dPres.open)pintarPres();
     if(dFirmas.open)pintarFirmas();
+  },
+  sesion(email){              // null = sin sesión · undefined = nube no disponible
+    if(email){loginOcultar();return;}
+    if(email===null&&!sinSesion){login.style.display="flex";lgSin.style.display="none";setTimeout(()=>lg_mail.focus(),50);}
+    else if(email===undefined&&login.style.display==="flex")lgSin.style.display="block";
   },
   estadoSync(txt,tipo){
     syncTxt.textContent=txt;
@@ -390,7 +495,7 @@ const opts=(arr,todos)=>(todos?`<option value="">${todos}</option>`:"")+arr.map(
 function llenarSelects(){
   fCat.innerHTML=opts(cats,"Todas las categorías");
   e_cat.innerHTML=opts(cats);
-  fEst.innerHTML=opts(ESTADOS,"Todos los estados");
+  const fe=fEst.value;fEst.innerHTML=opts(ESTADOS,"Todos los estados")+'<option value="__prest">⏳ Devolución pendiente</option><option value="__disp">✓ Disponibles para préstamo</option>';fEst.value=fe;
   e_est.innerHTML=opts(ESTADOS);
   e_frec.innerHTML='<option value="">—</option>'+FRECS.map(v=>`<option value="${v}">${v.replace(".",",")} MHz</option>`).join("");
   e_diam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
@@ -421,20 +526,25 @@ function toggleTransductor(){
 /* ---------- Listado ---------- */
 function filtrados(){
   const q=document.getElementById("q").value.toLowerCase().trim();
-  return equipos.filter(e=>(!fCat.value||e.cat===fCat.value)&&(!fEst.value||e.est===fEst.value)&&
-    (!q||[e.serie,e.marca,e.modelo,e.ubic,e.rcal,txtFrec(e),txtDiam(e)].join(" ").toLowerCase().includes(q)))
+  const okEst=e=>!fEst.value||(fEst.value==="__prest"?!!prestActivo(e):fEst.value==="__disp"?disponible(e):e.est===fEst.value);
+  return equipos.filter(e=>(!fCat.value||e.cat===fCat.value)&&okEst(e)&&
+    (!q||[e.serie,e.marca,e.modelo,e.ubic,e.rcal,txtFrec(e),txtDiam(e),prestActivo(e)?.quien,prestActivo(e)?.dest].join(" ").toLowerCase().includes(q)))
     .sort((a,b)=>(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
 }
 function render(){
   const l=filtrados();
+  const pend=equipos.filter(e=>prestActivo(e)),atr=pend.filter(e=>prestVencido(prestActivo(e)));
+  pBdg.textContent=pend.length;pBdg.style.display=pend.length?"block":"none";pBdg.style.background=atr.length?"var(--baja)":"#6941c6";
+  pAviso.className="aviso"+(atr.length?" atr":"");pAviso.style.display=pend.length&&fEst.value!=="__prest"?"block":"none";
+  pAviso.innerHTML=`⏳ <b>${pend.length}</b> ${pend.length===1?"equipo con devolución pendiente":"equipos con devolución pendiente"}${atr.length?` · <b>⚠️ ${atr.length} atrasado${atr.length>1?"s":""}</b>`:""} — toca para ver`;
   const cnt=s=>equipos.filter(e=>e.est===s).length;
   stats.innerHTML=`<div>Total: <b>${equipos.length}</b></div><div>Operativos: <b>${cnt("Operativo")}</b></div>
-    <div>De baja: <b>${cnt("Dado de baja")}</b></div><div>Calibración vencida: <b class="venc">${equipos.filter(vencido).length}</b></div>`;
-  lista.innerHTML=l.length?l.map(e=>`<div class="card" onclick="ver('${e.id}')">
+    <div>Devolución pendiente: <b style="color:#6941c6">${pend.length}</b></div><div>De baja: <b>${cnt("Dado de baja")}</b></div><div>Calibración vencida: <b class="venc">${equipos.filter(vencido).length}</b></div>`;
+  lista.innerHTML=l.length?l.map(e=>`<div class="card${prestActivo(e)?" pend"+(prestVencido(prestActivo(e))?" atr":""):""}" onclick="ver('${e.id}')">
     ${e.foto?`<img src="${e.foto}">`:`<div class="ph">${ICONOS[e.cat]||"🔧"}</div>`}
     <div class="info"><b>S/N ${esc(e.serie)} · ${esc(e.marca)} ${esc(e.modelo)}</b>
     <small>${esc(e.cat)}${e.frec||e.diam?" · "+[txtFrec(e),txtDiam(e)].filter(Boolean).join(" / "):""}${e.fprox?` · Próx. cal.: <span class="${vencido(e)?"venc":""}">${fmt(e.fprox)}</span>`:""}</small><br>
-    <span class="tag ${claseEst(e.est)}">${e.est}</span></div></div>`).join("")
+    <span class="tag ${claseEst(e.est)}">${e.est}</span>${(p=>p?` <span class="tag prest${prestVencido(p)?" atr":""}">${prestVencido(p)?"⚠️ Devolución atrasada":"⏳ Devolución pendiente"} · ${esc(p.quien)}</span>`:"")(prestActivo(e))}</div></div>`).join("")
     :'<p style="text-align:center;color:#667085;margin-top:40px">Sin equipos. Toca + para agregar.</p>';
 }
 
@@ -513,6 +623,7 @@ function ver(id){
   btnCal.style.display=esMedidor(e)&&e.est==="Operativo"?"":"none";
   btnFab.style.display=e.fabArch?"":"none";
   btnCertCal.style.display=esMedidor(e)&&e.est!=="Dado de baja"?"":"none";
+  pintarPrestDet(e);
   const cc=(e.certs||[]).slice().reverse();
   dCerts.innerHTML=cc.length?`<h3>Certificados de calibración emitidos</h3>`+cc.map(c=>`<div class="catrow" style="font-size:.88rem;border-bottom:1px solid var(--gris);padding:4px 0">
     <span><b>${esc(c.num)}</b> · ${fmt(c.fecha)} · <span style="color:${c.cumple?"var(--ok)":"var(--baja)"};font-weight:600">${c.cumple?"Conforme":"No conforme"}</span></span>
@@ -579,11 +690,12 @@ function numerarPaginas(doc){
 const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["modelo","Modelo"],["est","Estado"],
   ["frec","Frecuencia"],["diam","Diámetro"],["ubic","Ubicación"],["fcal","Últ. calibración"],["fprox","Próx. calibración"],
   ["rcal","Resp. calibración"],["cert","Certificado"],["asoc","Asociado a"],["obs","Observaciones"],
-  ["fabnum","Cert. fábrica N°"],["fabfecha","Fecha cert. fábrica"]];
+  ["fabnum","Cert. fábrica N°"],["fabfecha","Fecha cert. fábrica"],["prest","Préstamo actual"]];
 function valor(e,k){
   if(k==="fcal"||k==="fprox"||k==="fabfecha")return fmt(e[k]);
   if(k==="frec")return txtFrec(e);
   if(k==="diam")return txtDiam(e);
+  if(k==="prest"){const p=prestActivo(e);return p?`${p.quien} — ${p.dest} (desde ${fmt(p.sal)})`:"";}
   return e[k]||"";
 }
 function exportarExcel(lista){
@@ -598,7 +710,7 @@ function abrirInforme(){
   iCats.innerHTML=cats.map(c=>`<label style="display:flex;gap:8px;align-items:center;margin:0;font-size:.95rem;color:var(--txt)">
     <input type="checkbox" value="${esc(c)}" ${!fCat.value||fCat.value===c?"checked":""} style="width:auto" onchange="iMarcas()">
     ${esc(c)} (${equipos.filter(e=>e.cat===c).length})</label>`).join("");
-  iEst.innerHTML=opts(ESTADOS,"Todos");iEst.value=fEst.value;
+  iEst.innerHTML=opts(ESTADOS,"Todos");iEst.value=fEst.value.startsWith("__")?"":fEst.value;
   iMarcas();dInf.showModal();
 }
 const catsInforme=()=>[...iCats.querySelectorAll("input:checked")].map(i=>i.value);
@@ -1015,7 +1127,7 @@ function certCalPDF(id,num){
 function abrirGraficos(){
   dMenu.open&&dMenu.close();
   gCat.innerHTML=opts(cats,"Todas");gCat.value=fCat.value;
-  gEst.innerHTML=opts(ESTADOS,"Todos");gEst.value=fEst.value;
+  gEst.innerHTML=opts(ESTADOS,"Todos");gEst.value=fEst.value.startsWith("__")?"":fEst.value;
   pintarGraficos(true);dGraf.showModal();
 }
 const unicos=a=>[...new Set(a.filter(Boolean))].sort((x,y)=>x.localeCompare(y,"es",{numeric:true}));
@@ -1047,6 +1159,213 @@ function pintarGraficos(recargarFiltros){
     :'<p style="color:#667085">No hay equipos con esos filtros.</p>');
 }
 
+/* ---------- Préstamos y devoluciones ---------- */
+// Cada préstamo se guarda dentro del equipo (e.prestamos[]), así se sincroniza y respalda junto con él.
+// Registro: {id, gid (préstamo/acta), quien, emp, dest, entrega, sal, comp, obs, firma, creado, dev:{fecha,recibe,cond,obs,reg}}
+const prestActivo=e=>(e.prestamos||[]).find(p=>!p.dev);
+const prestVencido=p=>!!(p&&!p.dev&&p.comp&&p.comp<hoy());
+const disponible=e=>e.est==="Operativo"&&!prestActivo(e);
+const todosPrest=()=>equipos.flatMap(e=>(e.prestamos||[]).map(p=>({p,e})));
+const numActa=p=>"PR-"+(p.sal||"").replace(/-/g,"")+"-"+p.gid.slice(0,4).toUpperCase();
+let pVista="act",pSelSet=new Set(),firmaVacia=true,dvGid=null;
+
+function gruposActivos(){
+  const g=new Map();
+  for(const {p,e} of todosPrest()) if(!p.dev){ if(!g.has(p.gid))g.set(p.gid,{p,eqs:[]}); g.get(p.gid).eqs.push(e); }
+  return [...g.values()].sort((a,b)=>(a.p.comp||"9999").localeCompare(b.p.comp||"9999")||(a.p.sal||"").localeCompare(b.p.sal||""));
+}
+function abrirPrestamos(){dMenu.open&&dMenu.close();pintarPres();dPres.showModal();}
+function pintarPres(){
+  pTabA.className=pVista==="act"?"":"sec";pTabH.className=pVista==="hist"?"":"sec";
+  const q=pQ.value.toLowerCase().trim(),act=gruposActivos();
+  const txt=(p,eqs)=>[p.quien,p.emp,p.dest,p.entrega,numActa(p),...eqs.map(e=>[e.serie,e.marca,e.modelo,e.cat].join(" "))].join(" ").toLowerCase();
+  pStats.innerHTML=`<div>Préstamos activos: <b>${act.length}</b></div><div>Equipos fuera: <b>${act.reduce((s,g)=>s+g.eqs.length,0)}</b></div>
+    <div>Atrasados: <b class="venc">${act.filter(g=>prestVencido(g.p)).length}</b></div><div>Disponibles: <b>${equipos.filter(disponible).length}</b></div>`;
+  if(pVista==="act"){
+    const l=act.filter(g=>!q||txt(g.p,g.eqs).includes(q));
+    pLista.innerHTML=l.length?l.map(({p,eqs})=>`<div class="pgrp"${prestVencido(p)?' style="border-color:var(--baja)"':""}>
+      <b>${esc(p.quien)}</b>${p.emp?` · ${esc(p.emp)}`:""} <small style="float:right">${numActa(p)}</small><br>
+      <small>Destino: <b>${esc(p.dest)}</b> · Salida: ${fmt(p.sal)}${p.comp?` · Devolver: <span class="${prestVencido(p)?"venc":""}">${fmt(p.comp)}${prestVencido(p)?" ⚠️ ATRASADO":""}</span>`:""}</small>
+      <div style="margin:6px 0;font-size:.88rem;line-height:1.6">${eqs.map(e=>`<a href="#" onclick="dPres.close();ver('${e.id}');return false">${ICONOS[e.cat]||"🔧"} S/N ${esc(e.serie)}</a> <small>${esc([e.marca,e.modelo,txtFrec(e),txtDiam(e)].filter(Boolean).join(" "))}</small>`).join("<br>")}</div>
+      <div class="acts" style="margin-top:4px"><button class="sec" onclick="actaPDF('${p.gid}')">Acta PDF</button><button onclick="abrirDevolucion('${p.gid}')">Registrar devolución</button></div></div>`).join("")
+      :`<p style="text-align:center;color:#667085;margin:24px 0">${q?"Sin resultados.":"No hay equipos prestados."}</p>`;
+  }else{
+    const l=todosPrest().filter(({p,e})=>!q||txt(p,[e]).includes(q))
+      .sort((a,b)=>(b.p.sal||"").localeCompare(a.p.sal||"")||(b.p.creado||"").localeCompare(a.p.creado||""));
+    pLista.innerHTML=l.length?l.slice(0,300).map(({p,e})=>`<div class="pgrp" style="padding:8px 10px;font-size:.88rem">
+      <div class="catrow" style="margin:0"><span><a href="#" onclick="dPres.close();ver('${e.id}');return false"><b>S/N ${esc(e.serie)}</b></a> <small>${esc(e.cat)}</small><br>
+      <b>${esc(p.quien)}</b> · ${esc(p.dest)}<br>
+      <small>${fmt(p.sal)} → ${p.dev?`${fmt(p.dev.fecha)} · <span style="color:${p.dev.cond==="Dañado"?"var(--baja)":p.dev.cond==="Buen estado"?"var(--ok)":"var(--cal)"};font-weight:600">${esc(p.dev.cond)}</span>`:`<span class="${prestVencido(p)?"venc":""}" style="color:#6941c6;font-weight:600">${prestVencido(p)?"⚠️ Atrasado":"En préstamo"}</span>`}</small></span>
+      <button class="sec" style="padding:6px 10px" onclick="actaPDF('${p.gid}')">Acta</button></div></div>`).join("")
+      :`<p style="text-align:center;color:#667085;margin:24px 0">${q?"Sin resultados.":"Aún no hay préstamos registrados."}</p>`;
+  }
+}
+
+/* Detalle del equipo: estado de préstamo e historial */
+function pintarPrestDet(e){
+  const pa=prestActivo(e),hist=(e.prestamos||[]).filter(p=>p.dev).reverse();
+  let h="<h3>Préstamo</h3>";
+  if(pa)h+=`<div class="pgrp" style="border-color:${prestVencido(pa)?"var(--baja)":"#6941c6"}"><b style="color:${prestVencido(pa)?"var(--baja)":"#6941c6"}">${prestVencido(pa)?"⚠️ DEVOLUCIÓN ATRASADA":"⏳ DEVOLUCIÓN PENDIENTE"}</b><br>Prestado a <b>${esc(pa.quien)}</b>${pa.emp?" · "+esc(pa.emp):""}<br>
+    <small>Destino: ${esc(pa.dest)} · Salida: ${fmt(pa.sal)}${pa.comp?` · Devolver: <span class="${prestVencido(pa)?"venc":""}">${fmt(pa.comp)}${prestVencido(pa)?" ⚠️ ATRASADO":""}</span>`:""}</small>
+    <div class="acts" style="margin-top:6px"><button class="sec" onclick="actaPDF('${pa.gid}')">Acta PDF</button><button onclick="abrirDevolucion('${pa.gid}','${e.id}')">Registrar devolución</button></div></div>`;
+  else if(e.est==="Operativo")h+=`<div class="catrow"><span style="color:var(--ok);font-weight:600">✓ Disponible</span><button onclick="nuevoPrestamo(['${e.id}'])">🔁 Prestar</button></div>`;
+  else h+=`<div class="hint" style="font-size:.85rem">No disponible para préstamo (estado: ${esc(e.est)}).</div>`;
+  if(hist.length)h+=`<details style="margin-top:6px"><summary style="font-size:.85rem;cursor:pointer;color:var(--azul)">Historial de préstamos (${hist.length})</summary>`+
+    hist.map(p=>`<div style="font-size:.84rem;border-bottom:1px solid var(--gris);padding:5px 0">${fmt(p.sal)} → ${fmt(p.dev.fecha)} · <b>${esc(p.quien)}</b> · ${esc(p.dest)} · ${esc(p.dev.cond)}${p.dev.obs?` <small>(${esc(p.dev.obs)})</small>`:""}</div>`).join("")+"</details>";
+  dPrest.innerHTML=h;
+}
+
+function llenarDatalists(){
+  const t=todosPrest().map(x=>x.p);
+  const dl=(id,arr)=>document.getElementById(id).innerHTML=unicos(arr).map(v=>`<option value="${esc(v)}">`).join("");
+  dl("dlQuien",t.map(p=>p.quien));dl("dlEmp",t.map(p=>p.emp));dl("dlDest",t.map(p=>p.dest));
+  dl("dlEntrega",[...t.map(p=>p.entrega),...t.map(p=>p.dev&&p.dev.recibe),...firmas.map(f=>f.nombre)]);
+  return t.sort((a,b)=>(a.creado||"").localeCompare(b.creado||""));
+}
+
+/* Nuevo préstamo (uno o varios equipos en una misma acta) */
+function nuevoPrestamo(ids){
+  dDet.open&&dDet.close();
+  pSelSet=new Set((ids||[]).filter(id=>{const e=equipos.find(x=>x.id===id);return e&&disponible(e)}));
+  ["quien","emp","dest","comp","obs","q"].forEach(k=>document.getElementById("p_"+k).value="");
+  const t=llenarDatalists();
+  p_entrega.value=t.length?t[t.length-1].entrega||"":"";
+  p_sal.value=hoy();p_acta.checked=true;
+  pintarPSel();dPNew.showModal();iniciarFirma();
+}
+function pintarPSel(){
+  const q=p_q.value.toLowerCase().trim();
+  const l=equipos.filter(e=>disponible(e)&&(pSelSet.has(e.id)||!q||[e.serie,e.marca,e.modelo,e.cat,txtFrec(e),txtDiam(e)].join(" ").toLowerCase().includes(q)))
+    .sort((a,b)=>(pSelSet.has(b.id)-pSelSet.has(a.id))||(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
+  pSel.innerHTML=l.length?l.map(e=>`<label><input type="checkbox" ${pSelSet.has(e.id)?"checked":""} onchange="this.checked?pSelSet.add('${e.id}'):pSelSet.delete('${e.id}');cuentaPSel()">
+    <span>${ICONOS[e.cat]||"🔧"} <b>S/N ${esc(e.serie)}</b> · ${esc(e.cat)} <small style="color:#667085">${esc([e.marca,e.modelo,txtFrec(e),txtDiam(e)].filter(Boolean).join(" "))}</small>${vencido(e)?' <span class="venc" style="font-size:.78rem">cal. vencida</span>':""}</span></label>`).join("")
+    :'<div class="hint" style="padding:10px 0">No hay equipos disponibles para préstamo.</div>';
+  cuentaPSel();
+}
+function cuentaPSel(){pCuenta.textContent=pSelSet.size+(pSelSet.size===1?" equipo seleccionado":" equipos seleccionados");}
+
+/* Firma en pantalla */
+function iniciarFirma(){
+  const c=p_firma,r=c.getBoundingClientRect(),k=window.devicePixelRatio||1;
+  c.width=Math.max(1,r.width*k);c.height=Math.max(1,r.height*k);
+  const g=c.getContext("2d");g.scale(k,k);g.lineWidth=2.2;g.lineCap="round";g.lineJoin="round";g.strokeStyle="#0b1f3a";
+  firmaVacia=true;let dib=false;
+  c.onpointerdown=ev=>{dib=true;c.setPointerCapture(ev.pointerId);g.beginPath();g.moveTo(ev.offsetX,ev.offsetY);};
+  c.onpointermove=ev=>{if(!dib)return;g.lineTo(ev.offsetX,ev.offsetY);g.stroke();firmaVacia=false;};
+  c.onpointerup=c.onpointercancel=()=>{dib=false;};
+}
+function firmaPNG(){
+  const s=p_firma,c=document.createElement("canvas");c.width=480;c.height=Math.round(480*s.height/s.width);
+  c.getContext("2d").drawImage(s,0,0,c.width,c.height);return c.toDataURL("image/png");
+}
+
+async function guardarPrestamo(ev){
+  ev.preventDefault();
+  const sel=equipos.filter(e=>pSelSet.has(e.id)&&disponible(e));
+  if(!sel.length)return alert("Selecciona al menos un equipo.");
+  if(p_comp.value&&p_comp.value<p_sal.value)return alert("La devolución comprometida no puede ser anterior a la fecha de salida.");
+  const venc=sel.filter(vencido);
+  if(venc.length&&!confirm(`Atención: ${venc.length===1?"el equipo":venc.length+" equipos"} con calibración vencida (S/N ${venc.map(e=>e.serie).join(", ")}). ¿Prestar de todas formas?`))return;
+  const creado=new Date().toISOString(),gid=crypto.randomUUID();
+  const base={gid,quien:p_quien.value.trim(),emp:p_emp.value.trim(),dest:p_dest.value.trim(),entrega:p_entrega.value.trim(),
+    sal:p_sal.value,comp:p_comp.value,obs:p_obs.value.trim(),firma:firmaVacia?"":firmaPNG(),creado};
+  for(const e of sel){e.prestamos=[...(e.prestamos||[]),{id:crypto.randomUUID(),...base}];e.act=creado;await dbPut(e);}
+  equipos=await dbAll();dPNew.close();render();
+  if(p_acta.checked)actaPDF(gid);
+  if(dPres.open){pVista="act";pintarPres();}else if(sel.length===1)ver(sel[0].id);
+}
+
+/* Devolución (total o parcial de un préstamo) */
+function abrirDevolucion(gid,soloId){
+  const eqs=equipos.filter(e=>(e.prestamos||[]).some(p=>p.gid===gid&&!p.dev));
+  if(!eqs.length)return;
+  dvGid=gid;
+  const p=eqs[0].prestamos.find(x=>x.gid===gid&&!x.dev);
+  dvInfo.innerHTML=`Prestado a <b>${esc(p.quien)}</b> · ${esc(p.dest)} · salida ${fmt(p.sal)} <small style="color:#667085">(${numActa(p)})</small>`;
+  dvSel.innerHTML=eqs.map(e=>`<label><input type="checkbox" value="${e.id}" ${!soloId||soloId===e.id?"checked":""}>
+    <span>${ICONOS[e.cat]||"🔧"} <b>S/N ${esc(e.serie)}</b> · ${esc(e.cat)} <small style="color:#667085">${esc([e.marca,e.modelo].filter(Boolean).join(" "))}</small></span></label>`).join("");
+  llenarDatalists();
+  dv_fecha.value=hoy();dv_recibe.value=p.entrega||"";dv_cond.value="Buen estado";dv_obs.value="";dv_rep.checked=true;
+  dDet.open&&dDet.close();dPDev.showModal();
+}
+async function guardarDevolucion(ev){
+  ev.preventDefault();
+  const ids=[...dvSel.querySelectorAll("input:checked")].map(i=>i.value);
+  if(!ids.length)return alert("Marca al menos un equipo devuelto.");
+  const dev={fecha:dv_fecha.value,recibe:dv_recibe.value.trim(),cond:dv_cond.value,obs:dv_obs.value.trim(),reg:new Date().toISOString()};
+  const items=ids.map(id=>{const e=equipos.find(x=>x.id===id);return {e,p:e.prestamos.find(x=>x.gid===dvGid&&!x.dev)}}).filter(x=>x.p);
+  if(items.some(x=>dev.fecha<x.p.sal))return alert("La fecha de devolución no puede ser anterior a la fecha de salida.");
+  for(const {e,p} of items){p.dev={...dev};if(dev.cond==="Dañado"&&dv_rep.checked)e.est="En reparación";e.act=dev.reg;await dbPut(e);}
+  equipos=await dbAll();dPDev.close();render();
+  if(dPres.open)pintarPres();else if(ids.length===1)ver(ids[0]);
+}
+
+/* Acta de préstamo PDF (incluye la devolución si ya se registró) */
+function actaPDF(gid){
+  const items=todosPrest().filter(x=>x.p.gid===gid).sort((a,b)=>(a.e.cat+a.e.serie).localeCompare(b.e.cat+b.e.serie,"es",{numeric:true}));
+  if(!items.length)return alert("No se encontró el préstamo.");
+  const p=items[0].p,num=numActa(p),{jsPDF}=window.jspdf,doc=new jsPDF(),W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
+  encabezado(doc,"Acta de préstamo de equipos");
+  doc.setFontSize(10);doc.setFont(undefined,"bold");doc.text("N° "+num,W-14,31,{align:"right"});doc.setFont(undefined,"normal");
+  const datos=[["Retirado por",p.quien],["Empresa / área",p.emp],["Destino",p.dest],["Entregado por",p.entrega],
+    ["Fecha de salida",fmt(p.sal)],["Devolución comprometida",fmt(p.comp)],["Observaciones de salida",p.obs]].filter(d=>d[1]);
+  doc.autoTable({startY:35,body:datos,theme:"grid",styles:{fontSize:9.5},columnStyles:{0:{fontStyle:"bold",cellWidth:55,fillColor:[242,244,247]}}});
+  const hayDev=items.some(x=>x.p.dev);
+  const head=["N° serie","Categoría","Marca / modelo","Frec. / diám.","Próx. calibración"].concat(hayDev?["Devolución"]:[]);
+  doc.autoTable({startY:doc.lastAutoTable.finalY+6,head:[head],
+    body:items.map(({e,p})=>[e.serie,e.cat,[e.marca,e.modelo].filter(Boolean).join(" "),[txtFrec(e),txtDiam(e)].filter(Boolean).join(" / "),fmt(e.fprox)]
+      .concat(hayDev?[p.dev?`${fmt(p.dev.fecha)} · ${p.dev.cond}${p.dev.recibe?" · recibe "+p.dev.recibe:""}${p.dev.obs?" · "+p.dev.obs:""}`:"Pendiente"]:[])),
+    styles:{fontSize:8.5},headStyles:{fillColor:[11,61,107]}});
+  let y=doc.lastAutoTable.finalY+8;
+  doc.setFontSize(8.5);doc.setTextColor(80);
+  const leyenda=doc.splitTextToSize("Quien retira declara recibir los equipos indicados en buen estado de funcionamiento y se compromete a cuidarlos, usarlos solo para los fines de su trabajo y devolverlos en las mismas condiciones en la fecha comprometida, informando de inmediato cualquier daño o pérdida.",W-28);
+  doc.text(leyenda,14,y);doc.setTextColor(0);y+=leyenda.length*4+28;
+  if(y>H-20){doc.addPage();encabezado(doc,"Acta de préstamo de equipos");y=60;}
+  const cw=(W-28-20)/2,x2=14+cw+20;
+  if(p.firma){const im=doc.getImageProperties(p.firma),h=22,w=Math.min(cw,h*im.width/im.height);doc.addImage(p.firma,"PNG",x2+(cw-w)/2,y-h-1,w,h);}
+  doc.line(14,y,14+cw,y);doc.line(x2,y,x2+cw,y);
+  doc.setFontSize(9);doc.setFont(undefined,"bold");
+  doc.text("Entregado por",14+cw/2,y+5,{align:"center"});doc.text("Recibido por (retira)",x2+cw/2,y+5,{align:"center"});
+  doc.setFont(undefined,"normal");
+  doc.text(p.entrega||"",14+cw/2,y+10,{align:"center"});doc.text(p.quien||"",x2+cw/2,y+10,{align:"center"});
+  numerarPaginas(doc);
+  doc.save(`Acta_prestamo_${num}.pdf`);
+}
+
+function excelPrestamos(){
+  const l=todosPrest().sort((a,b)=>(b.p.sal||"").localeCompare(a.p.sal||""));
+  if(!l.length)return alert("Aún no hay préstamos registrados.");
+  const filas=l.map(({p,e})=>({"Acta":numActa(p),"N° serie":e.serie,"Categoría":e.cat,"Marca":e.marca||"","Modelo":e.modelo||"",
+    "Retirado por":p.quien,"Empresa / área":p.emp||"","Destino":p.dest,"Entregado por":p.entrega||"","Salida":fmt(p.sal),
+    "Devolución comprometida":fmt(p.comp),"Estado":p.dev?"Devuelto":prestVencido(p)?"Atrasado":"En préstamo",
+    "Fecha devolución":p.dev?fmt(p.dev.fecha):"","Recibido por":p.dev?p.dev.recibe:"","Condición":p.dev?p.dev.cond:"",
+    "Obs. salida":p.obs||"","Obs. devolución":p.dev?p.dev.obs:""}));
+  const ws=XLSX.utils.json_to_sheet(filas);ws["!cols"]=Object.keys(filas[0]).map(()=>({wch:16}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Préstamos");
+  XLSX.writeFile(wb,`Prestamos_Equipos_${hoy()}.xlsx`);
+}
+
+/* ---------- Pantalla de inicio de sesión ---------- */
+let sinSesion=false;
+function loginOcultar(sin){if(sin)sinSesion=true;login.style.display="none";lgMsg.textContent="";lg_pass.value="";}
+const msgAuth=e=>/invalid|wrong|not-found|user-disabled/.test(e.code||"")?"Correo o contraseña incorrectos.":
+  /too-many/.test(e.code||"")?"Demasiados intentos. Espera unos minutos.":
+  /network/.test(e.code||"")?"Sin conexión a internet.":(e.code||e.message);
+async function loginEntrar(ev){
+  ev.preventDefault();
+  if(!window.Sync){lgMsg.style.color="var(--baja)";lgMsg.textContent="Sin conexión con el servidor. Revisa tu señal.";lgSin.style.display="block";return;}
+  lgBtn.disabled=true;lgBtn.textContent="Ingresando…";lgMsg.textContent="";
+  try{await Sync.entrar(lg_mail.value.trim(),lg_pass.value);}
+  catch(e){lgMsg.style.color="var(--baja)";lgMsg.textContent=msgAuth(e);if(/network/.test(e.code||""))lgSin.style.display="block";}
+  lgBtn.disabled=false;lgBtn.textContent="Iniciar sesión";
+}
+async function loginRecuperar(){
+  const m=lg_mail.value.trim();
+  if(!m){lgMsg.style.color="var(--baja)";lgMsg.textContent="Escribe tu correo y vuelve a tocar el enlace.";return lg_mail.focus();}
+  try{await Sync.recuperar(m);lgMsg.style.color="var(--ok)";lgMsg.textContent="Te enviamos un correo para restablecer la contraseña.";}
+  catch(e){lgMsg.style.color="var(--baja)";lgMsg.textContent=msgAuth(e);}
+}
+
 /* ---------- Sincronización ---------- */
 function abrirSync(){dMenu.open&&dMenu.close();pintarSync();dSync.showModal();}
 function pintarSync(){
@@ -1060,7 +1379,7 @@ async function entrarSync(){
   try{await Sync.entrar(s_mail.value.trim(),s_pass.value);s_pass.value="";}
   catch(e){alert("No se pudo iniciar sesión: "+(/invalid|wrong|not-found/.test(e.code)?"correo o contraseña incorrectos.":e.code||e.message));}
 }
-async function salirSync(){if(confirm("¿Cerrar sesión? Los datos quedan en este dispositivo pero dejarán de sincronizarse."))await Sync.salir();}
+async function salirSync(){if(confirm("¿Cerrar sesión? Deberás volver a ingresar con tu correo y contraseña."))dSync.close(),sinSesion=false,await Sync.salir();}
 
 /* ---------- Menú, categorías, respaldo ---------- */
 function abrirMenu(){dMenu.showModal()}

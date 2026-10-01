@@ -24,10 +24,11 @@ async function iniciar() {
     auth = A.getAuth(app);
     try { fs = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
     catch { fs = F.getFirestore(app); }
-    A.onAuthStateChanged(auth, u => { usuario = u; u ? conectar() : desconectar(); });
+    A.onAuthStateChanged(auth, u => { usuario = u; App.sesion(u ? u.email : null); u ? conectar() : desconectar(); });
   } catch (e) {
     console.warn("Sync:", e);
     estado("Sin conexión con la nube (se reintentará al abrir la app con señal)", "err");
+    App.sesion(undefined);
   }
 }
 
@@ -167,6 +168,7 @@ window.Sync = {
   get configurado() { return !!(cfg && cfg.apiKey && !cfg.apiKey.startsWith("PEGAR")); },
   async entrar(email, clave) { await A.signInWithEmailAndPassword(auth, email, clave); },
   async salir() { await A.signOut(auth); },
+  async recuperar(email) { await A.sendPasswordResetEmail(auth, email); },
   forzar() { if (usuario) conectar(); }
 };
 iniciar();
