@@ -104,6 +104,11 @@
   .evbar{height:8px;background:var(--gris);border-radius:4px;overflow:hidden;margin:6px 0 4px}.evbar i{display:block;height:100%;background:var(--ok)}
   .evit{display:flex;gap:6px;align-items:baseline;font-size:.86rem;padding:3px 0;border-bottom:1px dashed var(--gris);flex-wrap:wrap}
   .evit .st{margin-left:auto;font-weight:600;white-space:nowrap}
+  .ptabs{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 2px}
+  .ptabs button{flex:0 0 auto;background:#fff;color:#475467;border:1px solid var(--borde);border-radius:18px;padding:6px 12px;font-size:.84rem;white-space:nowrap}
+  .ptabs button small{color:#98a2b3;margin-left:2px}
+  .ptabs button i{font-style:normal;margin-left:6px;background:var(--ok);color:#fff;border-radius:9px;padding:0 6px;font-size:.74rem;font-weight:700}
+  .ptabs button.on{background:var(--azul2);color:#fff;border-color:var(--azul2)}.ptabs button.on small{color:#dbe7f5}
   .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.9rem;color:var(--txt)}.chk input{width:auto}
   #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:flex;align-items:center;justify-content:center;padding:16px}
   #login .box{background:#fff;border-radius:14px;padding:24px 20px;width:min(380px,100%);box-shadow:0 10px 30px #0006}
@@ -425,6 +430,8 @@
   <h3>Equipos a prestar</h3>
   <input id="p_q" placeholder="Filtrar por serie, marca, modelo, frecuencia…" oninput="pintarPSel()">
   <div class="hint">Solo equipos en estado Operativo que no estén prestados.</div>
+  <div class="ptabs" id="pTabs"></div>
+  <label class="chk" style="margin:4px 0 0;font-size:.82rem" id="pTodosBox"><input type="checkbox" id="pTodos" onchange="pMarcarTodos(this.checked)"> <span id="pTodosTxt">Marcar todos los de esta pestaña</span></label>
   <div class="plist" id="pSel" style="margin-top:6px"></div>
   <div class="hint" id="pCuenta" style="font-weight:600;font-size:.82rem"></div>
   <label>Observaciones (accesorios, estado al salir)</label><textarea id="p_obs" rows="2" placeholder="Maletín, cable, bloque de calibración, acoplante…"></textarea>
@@ -1448,15 +1455,33 @@ function nuevoPrestamo(ids){
   const t=llenarDatalists();
   p_entrega.value=t.length?t[t.length-1].entrega||"":"";
   p_sal.value=hoy();p_acta.checked=true;
-  pintarPSel();dPNew.showModal();iniciarFirma();
+  pCat="";pintarPSel();dPNew.showModal();iniciarFirma();
+}
+let pCat="";   // pestaña activa del selector de equipos: "" = todas, "__sel" = seleccionados, o una categoría
+function pTab(c){pCat=c;pintarPSel();}
+function pVisibles(){
+  const q=p_q.value.toLowerCase().trim();
+  return equipos.filter(e=>disponible(e)&&(pCat==="__sel"?pSelSet.has(e.id):(!pCat||e.cat===pCat))
+    &&(pSelSet.has(e.id)&&!pCat||!q||[e.serie,e.marca,e.modelo,e.cat,txtFrec(e),txtDiam(e)].join(" ").toLowerCase().includes(q)));
+}
+function pMarcarTodos(on){pVisibles().forEach(e=>on?pSelSet.add(e.id):pSelSet.delete(e.id));pintarPSel();}
+function pintarTabs(){
+  const disp=equipos.filter(disponible),cats=unicos(disp.map(e=>e.cat));
+  if(pCat&&pCat!=="__sel"&&!cats.includes(pCat))pCat="";
+  const nSel=c=>disp.filter(e=>pSelSet.has(e.id)&&(!c||e.cat===c)).length;
+  const tab=(c,txt,n,k)=>`<button type="button" class="${pCat===c?"on":""}" onclick="pTab('${esc(c.replace(/'/g,"\\'"))}')">${txt} <small>${n}</small>${k?`<i>✓${k}</i>`:""}</button>`;
+  pTabs.innerHTML=tab("","Todas",disp.length,nSel(""))+cats.map(c=>tab(c,`${ICONOS[c]||"🔧"} ${esc(c)}`,disp.filter(e=>e.cat===c).length,nSel(c))).join("")
+    +(pSelSet.size?tab("__sel","Seleccionados",pSelSet.size,0):"");
 }
 function pintarPSel(){
-  const q=p_q.value.toLowerCase().trim();
-  const l=equipos.filter(e=>disponible(e)&&(pSelSet.has(e.id)||!q||[e.serie,e.marca,e.modelo,e.cat,txtFrec(e),txtDiam(e)].join(" ").toLowerCase().includes(q)))
+  pintarTabs();
+  const l=pVisibles()
     .sort((a,b)=>(pSelSet.has(b.id)-pSelSet.has(a.id))||(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
-  pSel.innerHTML=l.length?l.map(e=>`<label><input type="checkbox" ${pSelSet.has(e.id)?"checked":""} onchange="this.checked?pSelSet.add('${e.id}'):pSelSet.delete('${e.id}');cuentaPSel()">
+  pSel.innerHTML=l.length?l.map(e=>`<label><input type="checkbox" ${pSelSet.has(e.id)?"checked":""} onchange="this.checked?pSelSet.add('${e.id}'):pSelSet.delete('${e.id}');cuentaPSel();pintarTabs()">
     <span>${ICONOS[e.cat]||"🔧"} <b>S/N ${esc(e.serie)}</b> · ${esc(e.cat)} <small style="color:#667085">${esc([e.marca,e.modelo,txtFrec(e),txtDiam(e)].filter(Boolean).join(" "))}</small>${vencido(e)?' <span class="venc" style="font-size:.78rem">cal. vencida</span>':""}</span></label>`).join("")
     :'<div class="hint" style="padding:10px 0">No hay equipos disponibles para préstamo.</div>';
+  pTodos.checked=l.length>0&&l.every(e=>pSelSet.has(e.id));pTodosBox.style.display=l.length&&pCat!=="__sel"?"":"none";
+  pTodosTxt.textContent=pCat?"Marcar todos los de esta pestaña":"Marcar todos los visibles";
   cuentaPSel();
 }
 function cuentaPSel(){pCuenta.textContent=pSelSet.size+(pSelSet.size===1?" equipo seleccionado":" equipos seleccionados");}
