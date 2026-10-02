@@ -156,7 +156,7 @@
   <h2 id="fTit">Nuevo equipo</h2>
   <div class="grid2">
     <div><label>Categoría *</label><select id="e_cat" required onchange="toggleTransductor()"></select></div>
-    <div><label>N° de serie * (identificador)</label><input id="e_serie" required></div>
+    <div><label>N° de serie * (identificador)</label><input id="e_serie" required oninput="toggleAsocTrans(false)"></div>
     <div><label>Marca</label><input id="e_marca" placeholder="Olympus, GE…"></div>
     <div><label>Modelo</label><input id="e_modelo" placeholder="38DL Plus, D790…"></div>
     <div><label>Estado</label><select id="e_est"></select></div>
@@ -173,7 +173,7 @@
     <div><label>Responsable de calibración</label><input id="e_rcal" placeholder="Laboratorio / técnico"></div>
     <div><label>N° certificado</label><input id="e_cert"></div>
   </div>
-  <label>Equipo asociado</label><input id="e_asoc" list="dlAsoc" placeholder="Ej.: serie del medidor al que pertenece" oninput="toggleAsocTrans(true)"><datalist id="dlAsoc"></datalist>
+  <label>Equipo asociado</label><input id="e_asoc" list="dlAsoc" placeholder="Ej.: serie del medidor al que pertenece" oninput="toggleAsocTrans(true)"><datalist id="dlAsoc"></datalist><div class="hint" id="asocInfo" style="display:none;font-size:.8rem"></div>
   <div class="grid2" id="bloqueAsocTrans" style="display:none">
     <div><label>Frecuencia del transductor *</label><select id="e_tfrec"></select></div>
     <div><label>Diámetro del transductor *</label><select id="e_tdiam"></select></div>
@@ -560,6 +560,17 @@ function toggleAsocTrans(desdeCampo){
   const ver=!esT&&hay;
   bloqueAsocTrans.style.display=ver?"":"none";e_tfrec.required=e_tdiam.required=ver;
   if(ver&&desdeCampo){const t=transRegistrado(e_asoc.value);if(t){if(t.frec)e_tfrec.value=t.frec;if(t.diam)e_tdiam.value=t.diam;}}
+  // Transductor: indicar a qué medidor está asociado
+  asocInfo.style.display=esT?"":"none";
+  if(esT){const r=medAsoc({cat:e_cat.value,serie:e_serie.value,asoc:e_asoc.value,id:actual});
+    asocInfo.innerHTML=r.ok?`🔗 Asociado a: <b>${esc(r.txt)}</b>`:`<span style="color:var(--cal)">⚠️ ${esc(r.txt)}</span>`;}
+}
+// Medidor al que está asociado un transductor (por su campo "Equipo asociado" o por la asignación hecha desde el medidor)
+function medAsoc(t){
+  const m=equipos.find(x=>x.id!==t.id&&!esTrans(x)&&x.est!=="Dado de baja"&&esAsocDe(t,x));
+  if(m)return {ok:true,serie:m.serie,txt:[`Medidor S/N ${m.serie}`,[m.marca,m.modelo].filter(Boolean).join(" ")].filter(Boolean).join(" · ")};
+  const a=(t.asoc||"").trim();
+  return a?{ok:true,serie:a,txt:a}:{ok:false,txt:"No está asociado a un medidor"};
 }
 
 /* ---------- Listado ---------- */
@@ -611,9 +622,8 @@ function estadoCert(e){
 function tagVinculo(e){
   if(e.est==="Dado de baja")return "";
   if(esTrans(e)){
-    const m=equipos.find(x=>!esTrans(x)&&x.est!=="Dado de baja"&&esAsocDe(e,x));
-    return m?` <span class="tag vinc">🔗 Medidor S/N ${esc(m.serie)}</span>`
-      :(e.asoc||"").trim()?` <span class="tag vinc">🔗 ${esc(e.asoc.trim())}</span>`:` <span class="tag sinvinc">Sin equipo asociado</span>`;
+    const r=medAsoc(e);
+    return r.ok?` <span class="tag vinc">🔗 ${esc(/^Medidor/.test(r.txt)?"Medidor S/N "+r.serie:r.txt)}</span>`:` <span class="tag sinvinc">⚠️ ${r.txt}</span>`;
   }
   if(!esMedidor(e))return "";
   const t=equipos.find(x=>esTrans(x)&&x.est!=="Dado de baja"&&esAsocDe(x,e));
@@ -714,7 +724,7 @@ function ver(id){
   dFoto.src=e.foto||""; dFoto.style.display=e.foto?"block":"none";
   const filas=[["Marca",e.marca],["Modelo",e.modelo],["Estado",e.est],["Certificación",txtCert(e)],["Frecuencia",txtFrec(fd(e))],["Diámetro",txtDiam(fd(e))],
     ["Ubicación / responsable",e.ubic],["Última calibración",fmt(e.fcal)],["Próxima calibración",e.fprox?fmt(e.fprox)+(vencido(e)?" ⚠️ VENCIDA":""):""],
-    ["Responsable calibración",e.rcal],["Certificado",certFicha(e)],["Cert. de fábrica",[e.fabnum,fmt(e.fabfecha),e.fabArch?"📎 adjunto":""].filter(Boolean).join(" · ")],["Equipo asociado",e.asoc],["Transductor asociado",transAsoc(e)],["Observaciones",e.obs]];
+    ["Responsable calibración",e.rcal],["Certificado",certFicha(e)],["Cert. de fábrica",[e.fabnum,fmt(e.fabfecha),e.fabArch?"📎 adjunto":""].filter(Boolean).join(" · ")],esTrans(e)?["Medidor asociado",medAsoc(e).txt]:["Equipo asociado",e.asoc],["Transductor asociado",transAsoc(e)],["Observaciones",e.obs]];
   dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1]).replace(/\n/g,"<br>")}</td></tr>`).join("");
   btnCal.style.display=certVigente(e)?"":"none";
   btnFab.style.display=e.fabArch?"":"none";
