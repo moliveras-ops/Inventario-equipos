@@ -288,7 +288,6 @@
   <div class="grid2">
     <div><label>N° de certificado *</label><input id="cc_num" required></div>
     <div><label>Fecha de calibración *</label><input id="cc_fecha" type="date" required></div>
-    <div><label>Realizado por (nombre) *</label><input id="cc_resp" required placeholder="Nombre de quien realiza la verificación"></div>
     <div><label>Lugar</label><input id="cc_lugar" placeholder="Laboratorio IQS, Concepción…"></div>
     <div><label>Transductor utilizado *</label><select id="cc_trans" required onchange="ccTransSel()"></select></div>
     <div id="ccTSerieBox" style="display:none"><label>N° de serie del transductor *</label><input id="cc_tserie" placeholder="Escribe el N° de serie"></div>
@@ -309,7 +308,7 @@
   <label>Observaciones</label><textarea id="cc_obs" rows="2"></textarea>
   <h3>Firmas</h3>
   <div class="grid2">
-    <div><label>Firma — Realizado por</label><select id="cc_f1" onchange="const f=firmas.find(x=>x.id===this.value);if(f)cc_resp.value=f.nombre"></select></div>
+    <div><label>Firma — Realizado por *</label><select id="cc_f1" required></select></div>
     <div><label>Firma — Revisado / aprobado por</label><select id="cc_f2"></select></div>
   </div>
   <div class="hint"><a href="#" onclick="abrirFirmas(true);return false">✍️ Administrar firmas digitales</a></div>
@@ -622,8 +621,8 @@ function ver(id){
   dFoto.src=e.foto||""; dFoto.style.display=e.foto?"block":"none";
   const filas=[["Marca",e.marca],["Modelo",e.modelo],["Estado",e.est],["Frecuencia",txtFrec(e)],["Diámetro",txtDiam(e)],
     ["Ubicación / responsable",e.ubic],["Última calibración",fmt(e.fcal)],["Próxima calibración",e.fprox?fmt(e.fprox)+(vencido(e)?" ⚠️ VENCIDA":""):""],
-    ["Responsable calibración",e.rcal],["Certificado",e.cert],["Cert. de fábrica",[e.fabnum,fmt(e.fabfecha),e.fabArch?"📎 adjunto":""].filter(Boolean).join(" · ")],["Equipo asociado",e.asoc],["Observaciones",e.obs]];
-  dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1])}</td></tr>`).join("");
+    ["Responsable calibración",e.rcal],["Certificado",e.cert],["Cert. de fábrica",[e.fabnum,fmt(e.fabfecha),e.fabArch?"📎 adjunto":""].filter(Boolean).join(" · ")],["Equipo asociado",e.asoc],["Transductor asociado",transAsoc(e)],["Observaciones",e.obs]];
+  dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1]).replace(/\n/g,"<br>")}</td></tr>`).join("");
   btnCal.style.display=esMedidor(e)&&e.est==="Operativo"?"":"none";
   btnFab.style.display=e.fabArch?"":"none";
   btnCertCal.style.display=esMedidor(e)&&e.est!=="Dado de baja"?"":"none";
@@ -693,12 +692,23 @@ function numerarPaginas(doc){
 /* ---------- Exportaciones ---------- */
 const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["modelo","Modelo"],["est","Estado"],
   ["frec","Frecuencia"],["diam","Diámetro"],["ubic","Ubicación"],["fcal","Últ. calibración"],["fprox","Próx. calibración"],
-  ["rcal","Resp. calibración"],["cert","Certificado"],["asoc","Asociado a"],["obs","Observaciones"],
+  ["rcal","Resp. calibración"],["cert","Certificado"],["asoc","Asociado a"],["trans","Transductor asociado"],["obs","Observaciones"],
   ["fabnum","Cert. fábrica N°"],["fabfecha","Fecha cert. fábrica"],["prest","Préstamo actual"]];
+// Transductor(es) asociado(s) a un medidor: los que tienen este equipo en "Equipo asociado";
+// si no hay, el transductor usado en su último certificado de calibración.
+function transAsoc(e){
+  if(esTrans(e))return "";
+  const s=(e.serie||"").toLowerCase();
+  const ts=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja"&&(t.asoc||"").trim().toLowerCase()===s);
+  if(ts.length)return ts.map(t=>[`S/N ${t.serie}`,[t.marca,t.modelo].filter(Boolean).join(" "),[txtFrec(t),txtDiam(t)].filter(Boolean).join(" / ")].filter(Boolean).join(" · ")).join("\n");
+  const c=(e.certs||[]).slice(-1)[0];
+  return c&&c.trans?c.trans+" (último certificado)":"";
+}
 function valor(e,k){
   if(k==="fcal"||k==="fprox"||k==="fabfecha")return fmt(e[k]);
   if(k==="frec")return txtFrec(e);
   if(k==="diam")return txtDiam(e);
+  if(k==="trans")return transAsoc(e);
   if(k==="prest"){const p=prestActivo(e);return p?`${p.quien} — ${p.dest} (desde ${fmt(p.sal)})`:"";}
   return e[k]||"";
 }
@@ -960,9 +970,9 @@ async function borrarFirma(id){
   firmas=firmas.filter(x=>x.id!==id);await cfgSet("firmas",firmas);pintarFirmas();if(dCC.open)llenarSelFirmas();
 }
 function llenarSelFirmas(v1,v2){
-  const o='<option value="">— Sin firma digital —</option>'+firmas.map(f=>`<option value="${f.id}">${esc(f.nombre)}${f.cargo?" · "+esc(f.cargo):""}</option>`).join("");
+  const ops=firmas.map(f=>`<option value="${f.id}">${esc(f.nombre)}${f.cargo?" · "+esc(f.cargo):""}</option>`).join("");
   const a=v1!==undefined?v1:cc_f1.value,b=v2!==undefined?v2:cc_f2.value;
-  cc_f1.innerHTML=o;cc_f2.innerHTML=o;
+  cc_f1.innerHTML='<option value="">— Selecciona —</option>'+ops;cc_f2.innerHTML='<option value="">— Sin firma digital —</option>'+ops;
   cc_f1.value=firmas.some(f=>f.id===a)?a:"";cc_f2.value=firmas.some(f=>f.id===b)?b:"";
 }
 
@@ -979,7 +989,7 @@ async function abrirCertCal(){
   const e=actualEq(),u=(e.certs||[]).slice(-1)[0]||{};
   ccTit.textContent=`Certificado de calibración — S/N ${e.serie}`;
   cc_num.value=(await sigNumCert()).num;
-  cc_fecha.value=hoy();cc_resp.value=e.rcal||u.resp||"";cc_lugar.value=u.lugar||"";
+  cc_fecha.value=hoy();const respPrev=e.rcal||u.resp||"";cc_lugar.value=u.lugar||"";
   cc_vel.value=u.vel||"5920";cc_patserie.value=u.patserie||"";cc_patron.value=u.patron||PATRON_DEF;cc_patcert.value=u.patcert||"";cc_temp.value="";cc_tol.value=u.tol||"0.1";cc_obs.value="";
   const trans=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja");
   const asoc=trans.find(t=>(t.asoc||"").toLowerCase()===e.serie.toLowerCase());
@@ -996,7 +1006,7 @@ async function abrirCertCal(){
   ccTabla.innerHTML=`<tr style="text-align:left;color:var(--txt)"><th>Nominal (mm)</th><th>Lect. 1</th><th>Lect. 2</th><th>Lect. 3</th><th>Prom.</th><th>Error</th><th></th><th></th></tr>`;
   (u.puntos&&u.puntos.length?u.puntos.map(p=>p.nom):PUNTOS_DEF).forEach(n=>ccFila(n));
   await cargarFirmas();
-  const porNombre=firmas.find(f=>norm(f.nombre)===norm(cc_resp.value));
+  const porNombre=firmas.find(f=>norm(f.nombre)===norm(respPrev));
   llenarSelFirmas(u.f1&&u.f1.id||(porNombre?porNombre.id:""),u.f2&&u.f2.id||"");
   ccCalc();dDet.close();dCC.showModal();
 }
@@ -1046,7 +1056,7 @@ async function emitirCertCal(ev){
   if(!tserie)return alert("Selecciona un transductor de la lista o escribe su N° de serie.");
   if(!cc_tfrec.value||!cc_tdiam.value)return alert("Indica la frecuencia y el diámetro del transductor.");
   const tfx={frec:cc_tfrec.value,diam:cc_tdiam.value};
-  const c={num,fecha:cc_fecha.value,prox:sumarMeses(cc_fecha.value,MESES_CAL),resp:cc_resp.value.trim(),lugar:cc_lugar.value.trim(),
+  const c={num,fecha:cc_fecha.value,prox:sumarMeses(cc_fecha.value,MESES_CAL),resp:(firmas.find(f=>f.id===cc_f1.value)||{}).nombre||"",lugar:cc_lugar.value.trim(),
     transId:t?t.id:"",tserie,tfrec:tfx.frec,tdiam:tfx.diam,tdesc:t?[t.marca,t.modelo].filter(Boolean).join(" "):"",
     trans:[`S/N ${tserie}`,t?[t.marca,t.modelo].filter(Boolean).join(" "):"",[txtFrec(tfx),txtDiam(tfx)].join(" / ")].filter(Boolean).join(" · "),
     vel:cc_vel.value,patserie:cc_patserie.value.trim(),patron:cc_patron.value.trim(),patcert:cc_patcert.value.trim(),temp:cc_temp.value,tol:cc_tol.value,
