@@ -98,6 +98,12 @@
   #vsCuerpo.xls table{border-collapse:collapse;font-size:.78rem;white-space:nowrap}
   #vsCuerpo.xls td{border:1px solid var(--borde);padding:4px 8px}
   #vsCuerpo.xls tr:first-child td{background:var(--azul);color:#fff;font-weight:700;position:sticky;top:0}
+  .dvtodos{display:flex;align-items:center;gap:8px;font-size:.85rem;margin:2px 0 6px;flex-wrap:wrap}.dvtodos input{width:auto}.dvtodos select{width:auto;padding:6px 8px}
+  .dvlist{max-height:340px}.dvrow{border-bottom:1px solid var(--gris);padding:4px 0}.dvrow label{border:0;padding:4px 0}
+  .dvdat{display:flex;gap:6px;padding:0 0 4px 24px}.dvdat select{width:auto;padding:5px 6px;font-size:.85rem}.dvdat input{flex:1;padding:5px 8px;font-size:.85rem}
+  .evbar{height:8px;background:var(--gris);border-radius:4px;overflow:hidden;margin:6px 0 4px}.evbar i{display:block;height:100%;background:var(--ok)}
+  .evit{display:flex;gap:6px;align-items:baseline;font-size:.86rem;padding:3px 0;border-bottom:1px dashed var(--gris);flex-wrap:wrap}
+  .evit .st{margin-left:auto;font-weight:600;white-space:nowrap}
   .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.9rem;color:var(--txt)}.chk input{width:auto}
   #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:flex;align-items:center;justify-content:center;padding:16px}
   #login .box{background:#fff;border-radius:14px;padding:24px 20px;width:min(380px,100%);box-shadow:0 10px 30px #0006}
@@ -405,7 +411,9 @@
 
 <!-- Nuevo préstamo -->
 <dialog id="dPNew"><form class="dlg" onsubmit="guardarPrestamo(event)">
-  <h2>Nuevo préstamo</h2>
+  <h2>Nuevo préstamo / evento</h2>
+  <label>Evento o trabajo (opcional)</label><input id="p_evt" list="dlEvt" autocomplete="off" placeholder="Ej.: Parada General Planta Arauco 2026">
+  <div class="hint">Agrupa varios equipos bajo un mismo nombre para controlar cuáles vuelven y en qué condición.</div>
   <div class="grid2">
     <div><label>Retirado por (nombre) *</label><input id="p_quien" required list="dlQuien" autocomplete="off"></div>
     <div><label>Empresa / área</label><input id="p_emp" list="dlEmp" autocomplete="off"></div>
@@ -434,21 +442,22 @@
 <dialog id="dPDev"><form class="dlg" onsubmit="guardarDevolucion(event)">
   <h2>Registrar devolución</h2>
   <div id="dvInfo" style="font-size:.9rem;margin-bottom:8px"></div>
-  <label>Equipos devueltos</label>
-  <div class="plist" id="dvSel"></div>
+  <label>Equipos devueltos y condición de cada uno</label>
+  <div class="dvtodos"><span>Marcar todos</span><input type="checkbox" id="dv_all" onchange="dvSel.querySelectorAll('.dvchk').forEach(c=>c.checked=this.checked)">
+    <span style="margin-left:auto">Condición para todos:</span><select id="dv_cond" onchange="dvSel.querySelectorAll('.dvcond').forEach(x=>{x.value=this.value;dvColor(x)})"><option>Buen estado</option><option>Con observaciones</option><option>Dañado</option></select></div>
+  <div class="plist dvlist" id="dvSel"></div>
   <div class="grid2">
     <div><label>Fecha de devolución *</label><input id="dv_fecha" type="date" required></div>
     <div><label>Recibido por *</label><input id="dv_recibe" required list="dlEntrega" autocomplete="off"></div>
-    <div><label>Condición</label><select id="dv_cond"><option>Buen estado</option><option>Con observaciones</option><option>Dañado</option></select></div>
   </div>
-  <label>Observaciones</label><textarea id="dv_obs" rows="2"></textarea>
+  <label>Observación general</label><textarea id="dv_obs" rows="2" placeholder="Se aplica a los equipos sin observación propia"></textarea>
   <label class="chk"><input type="checkbox" id="dv_rep" checked> Si está dañado, cambiar estado a "En reparación"</label>
   <div class="acts">
     <button type="button" class="sec" onclick="dPDev.close()">Cancelar</button>
     <button type="submit">Registrar devolución</button>
   </div>
 </form></dialog>
-<datalist id="dlQuien"></datalist><datalist id="dlEmp"></datalist><datalist id="dlDest"></datalist><datalist id="dlEntrega"></datalist>
+<datalist id="dlEvt"></datalist><datalist id="dlQuien"></datalist><datalist id="dlEmp"></datalist><datalist id="dlDest"></datalist><datalist id="dlEntrega"></datalist>
 
 <script>
 const ESTADOS = ["Operativo","En calibración","En reparación","Dado de baja"];
@@ -1371,30 +1380,38 @@ let pVista="act",pSelSet=new Set(),firmaVacia=true,dvGid=null;
 
 function gruposActivos(){
   const g=new Map();
-  for(const {p,e} of todosPrest()) if(!p.dev){ if(!g.has(p.gid))g.set(p.gid,{p,eqs:[]}); g.get(p.gid).eqs.push(e); }
+  for(const {p,e} of todosPrest()) if(!p.dev){ if(!g.has(p.gid))g.set(p.gid,{p,eqs:[],items:[]}); g.get(p.gid).eqs.push(e); }
+  for(const {p,e} of todosPrest()) if(g.has(p.gid))g.get(p.gid).items.push({p,e});
+  g.forEach(x=>x.items.sort((a,b)=>(!!a.p.dev-!!b.p.dev)||(a.e.cat+a.e.serie).localeCompare(b.e.cat+b.e.serie,"es",{numeric:true})));
   return [...g.values()].sort((a,b)=>(a.p.comp||"9999").localeCompare(b.p.comp||"9999")||(a.p.sal||"").localeCompare(b.p.sal||""));
 }
 function abrirPrestamos(){dMenu.open&&dMenu.close();pintarPres();dPres.showModal();}
 function pintarPres(){
   pTabA.className=pVista==="act"?"":"sec";pTabH.className=pVista==="hist"?"":"sec";
   const q=pQ.value.toLowerCase().trim(),act=gruposActivos();
-  const txt=(p,eqs)=>[p.quien,p.emp,p.dest,p.entrega,numActa(p),...eqs.map(e=>[e.serie,e.marca,e.modelo,e.cat].join(" "))].join(" ").toLowerCase();
+  const txt=(p,eqs)=>[p.evt,p.quien,p.emp,p.dest,p.entrega,numActa(p),...eqs.map(e=>[e.serie,e.marca,e.modelo,e.cat].join(" "))].join(" ").toLowerCase();
   pStats.innerHTML=`<div>Préstamos activos: <b>${act.length}</b></div><div>Equipos fuera: <b>${act.reduce((s,g)=>s+g.eqs.length,0)}</b></div>
     <div>Atrasados: <b class="venc">${act.filter(g=>prestVencido(g.p)).length}</b></div><div>Disponibles: <b>${equipos.filter(disponible).length}</b></div>`;
   if(pVista==="act"){
     const l=act.filter(g=>!q||txt(g.p,g.eqs).includes(q));
-    pLista.innerHTML=l.length?l.map(({p,eqs})=>`<div class="pgrp"${prestVencido(p)?' style="border-color:var(--baja)"':""}>
+    pLista.innerHTML=l.length?l.map(({p,eqs,items})=>{
+      const dev=items.filter(x=>x.p.dev),n=items.length,cnt=c=>dev.filter(x=>x.p.dev.cond===c).length;
+      return `<div class="pgrp"${prestVencido(p)?' style="border-color:var(--baja)"':""}>
+      ${p.evt?`<div style="font-weight:700;color:var(--azul);margin-bottom:2px">📋 ${esc(p.evt)}</div>`:""}
       <b>${esc(p.quien)}</b>${p.emp?` · ${esc(p.emp)}`:""} <small style="float:right">${numActa(p)}</small><br>
       <small>Destino: <b>${esc(p.dest)}</b> · Salida: ${fmt(p.sal)}${p.comp?` · Devolver: <span class="${prestVencido(p)?"venc":""}">${fmt(p.comp)}${prestVencido(p)?" ⚠️ ATRASADO":""}</span>`:""}</small>
-      <div style="margin:6px 0;font-size:.88rem;line-height:1.6">${eqs.map(e=>`<a href="#" onclick="dPres.close();ver('${e.id}');return false">${ICONOS[e.cat]||"🔧"} S/N ${esc(e.serie)}</a> <small>${esc([e.marca,e.modelo,txtFrec(e),txtDiam(e)].filter(Boolean).join(" "))}</small>`).join("<br>")}</div>
-      <div class="acts" style="margin-top:4px"><button class="sec" onclick="actaPDF('${p.gid}')">Acta PDF</button><button onclick="abrirDevolucion('${p.gid}')">Registrar devolución</button></div></div>`).join("")
+      ${n>1?`<div class="evbar"><i style="width:${dev.length/n*100}%"></i></div>
+      <small><b>${dev.length} de ${n}</b> devueltos · <b style="color:#6941c6">${n-dev.length}</b> pendiente${n-dev.length===1?"":"s"}${dev.length?` · <span style="color:var(--ok)">${cnt("Buen estado")} buen estado</span>`+(cnt("Con observaciones")?` · <span style="color:var(--cal)">${cnt("Con observaciones")} con obs.</span>`:"")+(cnt("Dañado")?` · <span style="color:var(--baja)">${cnt("Dañado")} dañado${cnt("Dañado")>1?"s":""}</span>`:""):""}</small>`:""}
+      <div style="margin:6px 0">${items.map(({p:x,e})=>`<div class="evit"><a href="#" onclick="dPres.close();ver('${e.id}');return false">${ICONOS[e.cat]||"🔧"} S/N ${esc(e.serie)}</a> <small>${esc([e.marca,e.modelo,txtFrec(e),txtDiam(e)].filter(Boolean).join(" "))}</small>
+        <span class="st" style="color:${x.dev?COND_COLOR[x.dev.cond]:"#6941c6"}">${x.dev?`✓ ${fmt(x.dev.fecha)} · ${esc(x.dev.cond)}`:"⏳ Pendiente"}</span>${x.dev&&x.dev.obs?`<small style="flex-basis:100%;color:#667085;padding-left:22px">${esc(x.dev.obs)}</small>`:""}</div>`).join("")}</div>
+      <div class="acts" style="margin-top:4px"><button class="sec" onclick="actaPDF('${p.gid}')">Acta PDF</button><button onclick="abrirDevolucion('${p.gid}')">Registrar devolución</button></div></div>`;}).join("")
       :`<p style="text-align:center;color:#667085;margin:24px 0">${q?"Sin resultados.":"No hay equipos prestados."}</p>`;
   }else{
     const l=todosPrest().filter(({p,e})=>!q||txt(p,[e]).includes(q))
       .sort((a,b)=>(b.p.sal||"").localeCompare(a.p.sal||"")||(b.p.creado||"").localeCompare(a.p.creado||""));
     pLista.innerHTML=l.length?l.slice(0,300).map(({p,e})=>`<div class="pgrp" style="padding:8px 10px;font-size:.88rem">
       <div class="catrow" style="margin:0"><span><a href="#" onclick="dPres.close();ver('${e.id}');return false"><b>S/N ${esc(e.serie)}</b></a> <small>${esc(e.cat)}</small><br>
-      <b>${esc(p.quien)}</b> · ${esc(p.dest)}<br>
+      ${p.evt?`<span style="color:var(--azul)">📋 ${esc(p.evt)}</span><br>`:""}<b>${esc(p.quien)}</b> · ${esc(p.dest)}<br>
       <small>${fmt(p.sal)} → ${p.dev?`${fmt(p.dev.fecha)} · <span style="color:${p.dev.cond==="Dañado"?"var(--baja)":p.dev.cond==="Buen estado"?"var(--ok)":"var(--cal)"};font-weight:600">${esc(p.dev.cond)}</span>`:`<span class="${prestVencido(p)?"venc":""}" style="color:#6941c6;font-weight:600">${prestVencido(p)?"⚠️ Atrasado":"En préstamo"}</span>`}</small></span>
       <button class="sec" style="padding:6px 10px" onclick="actaPDF('${p.gid}')">Acta</button></div></div>`).join("")
       :`<p style="text-align:center;color:#667085;margin:24px 0">${q?"Sin resultados.":"Aún no hay préstamos registrados."}</p>`;
@@ -1418,7 +1435,7 @@ function pintarPrestDet(e){
 function llenarDatalists(){
   const t=todosPrest().map(x=>x.p);
   const dl=(id,arr)=>document.getElementById(id).innerHTML=unicos(arr).map(v=>`<option value="${esc(v)}">`).join("");
-  dl("dlQuien",t.map(p=>p.quien));dl("dlEmp",t.map(p=>p.emp));dl("dlDest",t.map(p=>p.dest));
+  dl("dlEvt",t.map(p=>p.evt));dl("dlQuien",t.map(p=>p.quien));dl("dlEmp",t.map(p=>p.emp));dl("dlDest",t.map(p=>p.dest));
   dl("dlEntrega",[...t.map(p=>p.entrega),...t.map(p=>p.dev&&p.dev.recibe),...firmas.map(f=>f.nombre)]);
   return t.sort((a,b)=>(a.creado||"").localeCompare(b.creado||""));
 }
@@ -1427,7 +1444,7 @@ function llenarDatalists(){
 function nuevoPrestamo(ids){
   dDet.open&&dDet.close();
   pSelSet=new Set((ids||[]).filter(id=>{const e=equipos.find(x=>x.id===id);return e&&disponible(e)}));
-  ["quien","emp","dest","comp","obs","q"].forEach(k=>document.getElementById("p_"+k).value="");
+  ["evt","quien","emp","dest","comp","obs","q"].forEach(k=>document.getElementById("p_"+k).value="");
   const t=llenarDatalists();
   p_entrega.value=t.length?t[t.length-1].entrega||"":"";
   p_sal.value=hoy();p_acta.checked=true;
@@ -1467,7 +1484,7 @@ async function guardarPrestamo(ev){
   const venc=sel.filter(vencido);
   if(venc.length&&!confirm(`Atención: ${venc.length===1?"el equipo":venc.length+" equipos"} con calibración vencida (S/N ${venc.map(e=>e.serie).join(", ")}). ¿Prestar de todas formas?`))return;
   const creado=new Date().toISOString(),gid=crypto.randomUUID();
-  const base={gid,quien:p_quien.value.trim(),emp:p_emp.value.trim(),dest:p_dest.value.trim(),entrega:p_entrega.value.trim(),
+  const base={gid,evt:p_evt.value.trim(),quien:p_quien.value.trim(),emp:p_emp.value.trim(),dest:p_dest.value.trim(),entrega:p_entrega.value.trim(),
     sal:p_sal.value,comp:p_comp.value,obs:p_obs.value.trim(),firma:firmaVacia?"":firmaPNG(),creado};
   for(const e of sel){e.prestamos=[...(e.prestamos||[]),{id:crypto.randomUUID(),...base}];e.act=creado;await dbPut(e);}
   equipos=await dbAll();dPNew.close();render();
@@ -1475,6 +1492,8 @@ async function guardarPrestamo(ev){
   if(dPres.open){pVista="act";pintarPres();}else if(sel.length===1)ver(sel[0].id);
 }
 
+const COND_COLOR={"Buen estado":"var(--ok)","Con observaciones":"var(--cal)","Dañado":"var(--baja)"};
+function dvColor(x){x.style.color=COND_COLOR[x.value]||"";x.style.fontWeight="600";}
 /* Devolución (total o parcial de un préstamo) */
 function abrirDevolucion(gid,soloId){
   const eqs=equipos.filter(e=>(e.prestamos||[]).some(p=>p.gid===gid&&!p.dev));
@@ -1482,20 +1501,25 @@ function abrirDevolucion(gid,soloId){
   dvGid=gid;
   const p=eqs[0].prestamos.find(x=>x.gid===gid&&!x.dev);
   dvInfo.innerHTML=`Prestado a <b>${esc(p.quien)}</b> · ${esc(p.dest)} · salida ${fmt(p.sal)} <small style="color:#667085">(${numActa(p)})</small>`;
-  dvSel.innerHTML=eqs.map(e=>`<label><input type="checkbox" value="${e.id}" ${!soloId||soloId===e.id?"checked":""}>
-    <span>${ICONOS[e.cat]||"🔧"} <b>S/N ${esc(e.serie)}</b> · ${esc(e.cat)} <small style="color:#667085">${esc([e.marca,e.modelo].filter(Boolean).join(" "))}</small></span></label>`).join("");
+  dvInfo.innerHTML=(p.evt?`<b style="color:var(--azul)">📋 ${esc(p.evt)}</b><br>`:"")+dvInfo.innerHTML;
+  dvSel.innerHTML=eqs.map(e=>`<div class="dvrow"><label><input type="checkbox" class="dvchk" value="${e.id}" ${!soloId||soloId===e.id?"checked":""}>
+    <span>${ICONOS[e.cat]||"🔧"} <b>S/N ${esc(e.serie)}</b> · ${esc(e.cat)} <small style="color:#667085">${esc([e.marca,e.modelo].filter(Boolean).join(" "))}</small></span></label>
+    <div class="dvdat"><select class="dvcond" data-id="${e.id}" onchange="dvColor(this)"><option>Buen estado</option><option>Con observaciones</option><option>Dañado</option></select>
+    <input class="dvobs" data-id="${e.id}" placeholder="Observación de este equipo (opcional)"></div></div>`).join("");
+  dv_all.checked=!soloId;dvSel.querySelectorAll(".dvcond").forEach(dvColor);
   llenarDatalists();
-  dv_fecha.value=hoy();dv_recibe.value=p.entrega||"";dv_cond.value="Buen estado";dv_obs.value="";dv_rep.checked=true;
+  dv_fecha.value=hoy();dv_recibe.value=p.entrega||"";dv_cond.value="Buen estado";dvSel.querySelectorAll(".dvcond").forEach(x=>{x.value="Buen estado";dvColor(x)});dv_obs.value="";dv_rep.checked=true;
   dDet.open&&dDet.close();dPDev.showModal();
 }
 async function guardarDevolucion(ev){
   ev.preventDefault();
-  const ids=[...dvSel.querySelectorAll("input:checked")].map(i=>i.value);
+  const ids=[...dvSel.querySelectorAll(".dvchk:checked")].map(i=>i.value);
   if(!ids.length)return alert("Marca al menos un equipo devuelto.");
-  const dev={fecha:dv_fecha.value,recibe:dv_recibe.value.trim(),cond:dv_cond.value,obs:dv_obs.value.trim(),reg:new Date().toISOString()};
+  const dev={fecha:dv_fecha.value,recibe:dv_recibe.value.trim(),obs:dv_obs.value.trim(),reg:new Date().toISOString()};
+  const condDe=id=>dvSel.querySelector(`.dvcond[data-id="${id}"]`).value,obsDe=id=>dvSel.querySelector(`.dvobs[data-id="${id}"]`).value.trim();
   const items=ids.map(id=>{const e=equipos.find(x=>x.id===id);return {e,p:e.prestamos.find(x=>x.gid===dvGid&&!x.dev)}}).filter(x=>x.p);
   if(items.some(x=>dev.fecha<x.p.sal))return alert("La fecha de devolución no puede ser anterior a la fecha de salida.");
-  for(const {e,p} of items){p.dev={...dev};if(dev.cond==="Dañado"&&dv_rep.checked)e.est="En reparación";e.act=dev.reg;await dbPut(e);}
+  for(const {e,p} of items){p.dev={...dev,cond:condDe(e.id),obs:obsDe(e.id)||dev.obs};if(p.dev.cond==="Dañado"&&dv_rep.checked)e.est="En reparación";e.act=dev.reg;await dbPut(e);}
   equipos=await dbAll();dPDev.close();render();
   if(dPres.open)pintarPres();else if(ids.length===1)ver(ids[0]);
 }
@@ -1550,7 +1574,7 @@ function actaPDF(gid){
   const p=items[0].p,num=numActa(p),{jsPDF}=window.jspdf,doc=new jsPDF(),W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
   encabezado(doc,"Acta de préstamo de equipos");
   doc.setFontSize(10);doc.setFont(undefined,"bold");doc.text("N° "+num,W-14,31,{align:"right"});doc.setFont(undefined,"normal");
-  const datos=[["Retirado por",p.quien],["Empresa / área",p.emp],["Destino",p.dest],["Entregado por",p.entrega],
+  const datos=[["Evento / trabajo",p.evt],["Retirado por",p.quien],["Empresa / área",p.emp],["Destino",p.dest],["Entregado por",p.entrega],
     ["Fecha de salida",fmt(p.sal)],["Devolución comprometida",fmt(p.comp)],["Observaciones de salida",p.obs]].filter(d=>d[1]);
   doc.autoTable({startY:35,body:datos,theme:"grid",styles:{fontSize:9.5},columnStyles:{0:{fontStyle:"bold",cellWidth:55,fillColor:[242,244,247]}}});
   const hayDev=items.some(x=>x.p.dev);
@@ -1578,7 +1602,7 @@ function actaPDF(gid){
 function excelPrestamos(){
   const l=todosPrest().sort((a,b)=>(b.p.sal||"").localeCompare(a.p.sal||""));
   if(!l.length)return alert("Aún no hay préstamos registrados.");
-  const filas=l.map(({p,e})=>({"Acta":numActa(p),"N° serie":e.serie,"Categoría":e.cat,"Marca":e.marca||"","Modelo":e.modelo||"",
+  const filas=l.map(({p,e})=>({"Acta":numActa(p),"Evento":p.evt||"","N° serie":e.serie,"Categoría":e.cat,"Marca":e.marca||"","Modelo":e.modelo||"",
     "Retirado por":p.quien,"Empresa / área":p.emp||"","Destino":p.dest,"Entregado por":p.entrega||"","Salida":fmt(p.sal),
     "Devolución comprometida":fmt(p.comp),"Estado":p.dev?"Devuelto":prestVencido(p)?"Atrasado":"En préstamo",
     "Fecha devolución":p.dev?fmt(p.dev.fecha):"","Recibido por":p.dev?p.dev.recibe:"","Condición":p.dev?p.dev.cond:"",
