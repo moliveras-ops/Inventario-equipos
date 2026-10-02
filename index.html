@@ -276,7 +276,7 @@
 <!-- Etiquetas de equipo certificado (medidores de espesor) -->
 <dialog id="dCal"><div class="dlg">
   <h2>Etiquetas "Equipo certificado"</h2>
-  <div class="hint" style="font-size:.85rem">Solo medidores de espesor operativos con certificado vigente y conforme · Tamaño 40 × 50 mm</div>
+  <div class="hint" style="font-size:.85rem">Solo medidores de espesor operativos con certificado vigente y conforme · Tamaño 48 × 25 mm (horizontal)</div>
   <div class="hint" id="cCuenta"></div>
   <div class="acts">
     <button class="sec" onclick="dCal.close()">Cancelar</button>
@@ -949,7 +949,7 @@ function etqTransductor(doc,e,x,y,A,Lg){
   lin.slice(0,3).forEach((t,n)=>doc.splitTextToSize(t,mw).slice(0,n===2?2:1).forEach((r,k)=>doc.text(r,tx,y+10+n*3.8+k*2.4)));
 }
 
-/* ---------- Etiquetas "Equipo certificado" (solo medidores de espesor, 40 x 50 mm) ---------- */
+/* ---------- Etiquetas "Equipo certificado" (solo medidores de espesor, 48 x 25 mm horizontal) ---------- */
 const esMedidor=e=>/espesor/i.test(e.cat||"");
 function abrirEtqCal(){dMenu.open&&dMenu.close();cuentaCal();dCal.showModal();}
 function listaCal(){
@@ -969,7 +969,7 @@ function etiquetasCalPDF(lista){
   const l=lista.filter(certVigente).sort((a,b)=>a.serie.localeCompare(b.serie,"es",{numeric:true}));
   if(!l.length)return alert("La etiqueta de equipo certificado es solo para medidores de espesor operativos con certificado vigente y conforme.");
   const {jsPDF}=window.jspdf,doc=new jsPDF();
-  const LW=40,LH=50,gap=3,m=10;
+  const LW=48,LH=25,gap=3,m=10;
   const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
   const cols=Math.floor((W-2*m+gap)/(LW+gap)),filas=Math.floor((H-2*m+gap)/(LH+gap)),porPag=cols*filas;
   l.forEach((e,i)=>{
@@ -980,45 +980,48 @@ function etiquetasCalPDF(lista){
   doc.save(`Etiquetas_equipo_certificado_${l.length===1?l[0].serie:hoy()}.pdf`);
 }
 function etqCert(doc,e,x,y,LW,LH){
-  const AZ=[30,58,205];
+  // Formato horizontal 48 x 25 mm
+  const AZ=[30,58,205],HC=6.6;
   // Cabecera azul con logo y título
-  doc.setFillColor(...AZ);doc.roundedRect(x,y,LW,12,2.5,2.5,"F");doc.rect(x,y+8,LW,4,"F");
-  doc.setFillColor(255,255,255);doc.roundedRect(x+2,y+1.8,14,8.4,1.3,1.3,"F");
-  const lg=logoSup();if(lg){let w=12.6,hh=w/lg.r;if(hh>7.4){hh=7.4;w=hh*lg.r;}doc.addImage(lg.d,"PNG",x+2+(14-w)/2,y+1.8+(8.4-hh)/2,w,hh);}
-  doc.setTextColor(255);doc.setFont(undefined,"bold");doc.setFontSize(6.6);
-  doc.text("EQUIPO",x+18.2,y+5.6);doc.text("CERTIFICADO",x+18.2,y+8.8);
+  doc.setFillColor(...AZ);doc.roundedRect(x,y,LW,HC,2,2,"F");doc.rect(x,y+HC-2.6,LW,2.6,"F");
+  doc.setFillColor(255,255,255);doc.roundedRect(x+1.5,y+1,9.6,HC-2,1,1,"F");
+  const lg=logoSup();if(lg){let w=8.8,hh=w/lg.r;if(hh>HC-2.8){hh=HC-2.8;w=hh*lg.r;}doc.addImage(lg.d,"PNG",x+1.5+(9.6-w)/2,y+1+(HC-2-hh)/2,w,hh);}
+  doc.setTextColor(255);doc.setFont(undefined,"bold");doc.setFontSize(6.4);
+  doc.text("EQUIPO CERTIFICADO",x+12.6,y+4.3);
   // Borde
-  doc.setDrawColor(...AZ);doc.setLineWidth(0.5);doc.roundedRect(x,y,LW,LH,2.5,2.5,"S");
-  // Campos
+  doc.setDrawColor(...AZ);doc.setLineWidth(0.4);doc.roundedRect(x,y,LW,LH,2,2,"S");
+  // Campos (zona izquierda)
   doc.setTextColor(0);
   const uc=(e.certs||[]).slice().sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")||(a.emitido||"").localeCompare(b.emitido||"")).pop();
   const aprobo=uc&&uc.f2&&uc.f2.nombre||"";   // firma "Revisado / aprobado por" del último certificado
   const campos=[["Marca:",e.marca],["Modelo:",e.modelo],["N° de serie:",e.serie],["Fecha:",fmt(uc&&uc.fecha>=(e.fcal||"")?uc.fecha:e.fcal)],["Aprobado por:",aprobo]];
-  const x0=x+15.5,x1=x+LW-2.2;
+  const cx=x+33,x0=x+12.9,x1=cx-1.2;
   const linea=(et,val,yy)=>{
-    doc.setFont(undefined,"bold");doc.setFontSize(5);doc.text(et,x+2.2,yy);
-    doc.setDrawColor(90);doc.setLineWidth(0.15);doc.line(x0,yy+0.7,x1,yy+0.7);
-    if(val){doc.setFont(undefined,"normal");let fs=5.6;doc.setFontSize(fs);
-      while(fs>3.8&&doc.getTextWidth(String(val))>x1-x0-0.8){fs-=0.2;doc.setFontSize(fs);}
-      doc.text(String(val),x0+0.5,yy);}
+    doc.setFont(undefined,"bold");doc.setFontSize(4.3);doc.text(et,x+1.8,yy);
+    doc.setDrawColor(90);doc.setLineWidth(0.12);doc.line(x0,yy+0.6,x1,yy+0.6);
+    if(val){doc.setFont(undefined,"normal");let fs=5;doc.setFontSize(fs);
+      while(fs>3.4&&doc.getTextWidth(String(val))>x1-x0-0.6){fs-=0.2;doc.setFontSize(fs);}
+      doc.text(String(val),x0+0.4,yy);}
   };
-  campos.forEach(([et,val],k)=>linea(et,val,y+16.6+k*4.9));
-  // Sello en la zona inferior
-  const sd=10.2,sx=x+2,sy=y+LH-sd-1.2;
-  if(selloData)doc.addImage(selloData.d,"PNG",sx,sy,sd,sd);
-  else if(logoData){const w=sd,hh=w/logoData.r;doc.addImage(logoData.d,"PNG",sx,sy+(sd-hh)/2,w,hh);}
-  // Firma de quien aprobó (zona derecha, junto al sello)
-  const fz=uc&&uc.f2,zx=x+sd+3.5,zw=LW-sd-5.5;
+  campos.forEach(([et,val],k)=>linea(et,val,y+HC+3+k*2.95));
+  doc.setFont(undefined,"normal");doc.setFontSize(3.3);doc.setTextColor(60);
+  doc.text("No retirar esta etiqueta",(x+1.8+x1)/2,y+LH-1.1,{align:"center"});
+  // Separador vertical
+  doc.setDrawColor(...AZ);doc.setLineWidth(0.15);doc.line(cx,y+HC+1,cx,y+LH-1.2);
+  // Zona derecha: sello + firma de quien aprobó
+  const cw=x+LW-cx,fz=uc&&uc.f2;
   if(fz&&fz.png){
-    const r=fz.r||3;let w=zw-1,hh=w/r;if(hh>7){hh=7;w=hh*r;}
-    try{doc.addImage(fz.png,"PNG",zx+(zw-w)/2,sy+7.2-hh,w,hh);}catch(err){}
-    doc.setDrawColor(90);doc.setLineWidth(0.15);doc.line(zx+1,sy+7.6,zx+zw-1,sy+7.6);
-    doc.setFont(undefined,"normal");doc.setFontSize(3.6);doc.setTextColor(60);
-    doc.text("Firma aprobación",zx+zw/2,sy+9.1,{align:"center"});
-    doc.setFontSize(3.4);doc.text("No retirar esta etiqueta",zx+zw/2,sy+sd+0.6,{align:"center"});
+    const sd=8.6,sx=cx+(cw-sd)/2,sy=y+HC+0.7;
+    if(selloData)doc.addImage(selloData.d,"PNG",sx,sy,sd,sd);
+    else if(logoData){const w=sd,hh=w/logoData.r;doc.addImage(logoData.d,"PNG",sx,sy+(sd-hh)/2,w,hh);}
+    const r=fz.r||3,yl=y+LH-3;let w=cw-2.4,hh=w/r;if(hh>4.4){hh=4.4;w=hh*r;}
+    try{doc.addImage(fz.png,"PNG",cx+(cw-w)/2,yl-0.2-hh,w,hh);}catch(err){}
+    doc.setDrawColor(90);doc.setLineWidth(0.12);doc.line(cx+1.2,yl,x+LW-1.2,yl);
+    doc.setFontSize(3.1);doc.setTextColor(60);doc.text("Firma aprobación",cx+cw/2,yl+1.5,{align:"center"});
   }else{
-    doc.setFont(undefined,"normal");doc.setFontSize(3.9);doc.setTextColor(60);
-    doc.text("No retirar esta etiqueta",zx+zw/2,sy+sd/2+0.7,{align:"center"});
+    const sd=11,sx=cx+(cw-sd)/2,sy=y+HC+(LH-HC-sd)/2;
+    if(selloData)doc.addImage(selloData.d,"PNG",sx,sy,sd,sd);
+    else if(logoData){const w=sd,hh=w/logoData.r;doc.addImage(logoData.d,"PNG",sx,sy+(sd-hh)/2,w,hh);}
   }
   doc.setTextColor(0);doc.setLineWidth(0.1);doc.setDrawColor(150);
 }
