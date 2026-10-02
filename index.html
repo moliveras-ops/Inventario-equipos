@@ -37,6 +37,7 @@
   .card small{color:#667085}
   .tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:10px;color:#fff;margin-top:4px}
   .tag.vinc{background:#475467}.tag.sinvinc{background:#fff;color:var(--cal);border:1px solid var(--cal)}
+  .tag.sincert{background:#fff;color:#667085;border:1px solid #98a2b3}
   .tag.cert{background:var(--azul2)}.tag.certno{background:var(--baja)}.tag.certven{background:var(--cal)}
   .Operativo{background:var(--ok)}.baja{background:var(--baja)}.cal{background:var(--cal)}
   .fab{position:fixed;right:18px;bottom:18px;width:58px;height:58px;border-radius:50%;font-size:2rem;box-shadow:0 4px 12px #0004}
@@ -572,7 +573,8 @@ function estadoCert(e){
   if(e.est==="Dado de baja")return null;
   const c=(e.certs||[]).slice(-1)[0],num=c?c.num:(e.cert||"");
   if(c&&!c.cumple)return {cls:"certno",txt:"✖ No conforme",num};
-  if(!c&&!e.fprox)return null;
+  // Solo cuenta como certificado si hay uno emitido en la app o un N° de certificado registrado en la ficha
+  if(!num)return esMedidor(e)||esTrans(e)||e.fprox?{cls:"sincert",txt:"Sin certificado",num:""}:null;
   if(vencido(e))return {cls:"certven",txt:"⚠️ Certificado vencido",num};
   return {cls:"cert",txt:"✔ Certificado",num};
 }
@@ -593,7 +595,7 @@ function tagCert(e){
   const s=estadoCert(e);
   return s?` <span class="tag ${s.cls}">${s.txt}${s.num?" · "+esc(s.num):""}</span>`:"";
 }
-const txtCert=e=>{const s=estadoCert(e);return s?s.txt.replace(/^\S+\s/,"")+(s.num?" · "+s.num:""):"";};
+const txtCert=e=>{const s=estadoCert(e);return s?s.txt.replace(/^[^\p{L}]+/u,"")+(s.num?" · "+s.num:""):"";};
 
 /* ---------- Formulario ---------- */
 const CAMPOS=["cat","serie","marca","modelo","est","ubic","frec","diam","fcal","fprox","rcal","cert","asoc","obs","fabnum","fabfecha"];
@@ -1043,11 +1045,14 @@ function llenarSelFirmas(v1,v2){
 /* ---------- Certificado de calibración (medidores de espesor) ---------- */
 const PUNTOS_DEF=["2.5","5","7.5","10","12.5"];
 const PATRON_DEF="Bloque escalonado acero 1018, 2,5–12,5 mm";
-async function sigNumCert(){
+// N° de certificado: IQS-CAL-<año>-<correlativo>-<N° de serie del equipo>
+async function sigNumCert(serie){
   const an=hoy().slice(0,4),k="certSeq_"+an;let n=(await cfgGet(k))||0;
-  const usados=new Set(equipos.flatMap(e=>(e.certs||[]).map(c=>c.num)));
-  let num;do{n++;num=`IQS-CAL-${an}-${String(n).padStart(3,"0")}`}while(usados.has(num));
-  return {num,n,k};
+  const base=x=>(x.match(/^IQS-CAL-\d{4}-\d+/)||[x])[0];
+  const usados=new Set(equipos.flatMap(e=>(e.certs||[]).map(c=>base(c.num))));
+  let b;do{n++;b=`IQS-CAL-${an}-${String(n).padStart(3,"0")}`}while(usados.has(b));
+  const sn=(serie||"").trim().toUpperCase().replace(/[\s\/\\]+/g,"");
+  return {num:sn?`${b}-${sn}`:b,n,k};
 }
 async function abrirCertCal(){
   const e=actualEq(),ue=(e.certs||[]).slice(-1)[0]||{};
@@ -1055,7 +1060,7 @@ async function abrirCertCal(){
   const g=equipos.flatMap(x=>x.certs||[]).sort((a,b)=>(a.emitido||a.fecha||"").localeCompare(b.emitido||b.fecha||"")).slice(-1)[0]||{};
   const u=k=>ue[k]||g[k]||"";
   ccTit.textContent=`Certificado de calibración — S/N ${e.serie}`;
-  cc_num.value=(await sigNumCert()).num;
+  cc_num.value=(await sigNumCert(e.serie)).num;
   cc_fecha.value=hoy();const respPrev=e.rcal||u("resp");cc_lugar.value=u("lugar");
   cc_vel.value=u("vel")||"5920";cc_patserie.value=u("patserie");cc_patron.value=u("patron")||PATRON_DEF;cc_patcert.value=u("patcert");cc_temp.value=u("temp");cc_tol.value=u("tol")||"0.1";cc_obs.value="";
   const trans=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja");
@@ -1145,7 +1150,7 @@ async function emitirCertCal(ev){
   if(cc_act.checked){e.fcal=c.fecha;e.fprox=c.prox;e.rcal=c.resp;e.cert=c.num;}
   e.act=new Date().toISOString();
   await dbPut(e);
-  const sq=await sigNumCert(),m=num.match(/^IQS-CAL-(\d{4})-(\d+)$/);
+  const sq=await sigNumCert(),m=num.match(/^IQS-CAL-(\d{4})-(\d+)/);
   if(m)await cfgSet("certSeq_"+m[1],Math.max(parseInt(m[2]),(await cfgGet("certSeq_"+m[1]))||0));
   equipos=await dbAll();dCC.close();render();
   ver(e.id);
@@ -1225,7 +1230,7 @@ function certCalPDF(id,num){
     else if(logoData)doc.addImage(logoData.d,"PNG",W-14-12*logoData.r,H-26,12*logoData.r,12);};
   for(let p=1;p<=doc.getNumberOfPages();p++){doc.setPage(p);selloPie();}
   numerarPaginas(doc);
-  doc.save(`Certificado_calibracion_${c.num}_${e.serie}_${fmt(fechaLocalISO(c.emitido))}.pdf`);
+  doc.save(`Certificado_calibracion_${c.num}${norm(c.num).endsWith(norm(e.serie))?"":"_"+e.serie}_${fmt(fechaLocalISO(c.emitido))}.pdf`);
 }
 
 /* ---------- Gráficos ---------- */
