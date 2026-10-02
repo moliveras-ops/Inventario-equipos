@@ -36,6 +36,7 @@
   .card b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .card small{color:#667085}
   .tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:10px;color:#fff;margin-top:4px}
+  .tag.vinc{background:#475467}.tag.sinvinc{background:#fff;color:var(--cal);border:1px solid var(--cal)}
   .tag.cert{background:var(--azul2)}.tag.certno{background:var(--baja)}.tag.certven{background:var(--cal)}
   .Operativo{background:var(--ok)}.baja{background:var(--baja)}.cal{background:var(--cal)}
   .fab{position:fixed;right:18px;bottom:18px;width:58px;height:58px;border-radius:50%;font-size:2rem;box-shadow:0 4px 12px #0004}
@@ -501,7 +502,7 @@ const opts=(arr,todos)=>(todos?`<option value="">${todos}</option>`:"")+arr.map(
 function llenarSelects(){
   fCat.innerHTML=opts(cats,"Todas las categorías");
   e_cat.innerHTML=opts(cats);
-  const fe=fEst.value;fEst.innerHTML=opts(ESTADOS,"Todos los estados")+'<option value="__prest">⏳ Devolución pendiente</option><option value="__disp">✓ Disponibles para préstamo</option>';fEst.value=fe;
+  const fe=fEst.value;fEst.innerHTML=opts(ESTADOS,"Todos los estados")+'<option value="__prest">⏳ Devolución pendiente</option><option value="__disp">✓ Disponibles para préstamo</option><option value="__sinv">⚠️ Sin transductor / equipo asociado</option>';fEst.value=fe;
   e_est.innerHTML=opts(ESTADOS);
   e_frec.innerHTML='<option value="">—</option>'+FRECS.map(v=>`<option value="${v}">${v.replace(".",",")} MHz</option>`).join("");
   e_diam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
@@ -542,7 +543,7 @@ function toggleAsocTrans(desdeCampo){
 /* ---------- Listado ---------- */
 function filtrados(){
   const q=document.getElementById("q").value.toLowerCase().trim();
-  const okEst=e=>!fEst.value||(fEst.value==="__prest"?!!prestActivo(e):fEst.value==="__disp"?disponible(e):e.est===fEst.value);
+  const okEst=e=>!fEst.value||(fEst.value==="__prest"?!!prestActivo(e):fEst.value==="__disp"?disponible(e):fEst.value==="__sinv"?/sinvinc/.test(tagVinculo(e)):e.est===fEst.value);
   return equipos.filter(e=>(!fCat.value||e.cat===fCat.value)&&okEst(e)&&
     (!q||[e.serie,e.marca,e.modelo,e.ubic,e.rcal,txtFrec(e),txtDiam(e),prestActivo(e)?.quien,prestActivo(e)?.dest].join(" ").toLowerCase().includes(q)))
     .sort((a,b)=>(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
@@ -561,7 +562,7 @@ function render(){
     ${e.foto?`<img src="${e.foto}">`:`<div class="ph">${ICONOS[e.cat]||"🔧"}</div>`}
     <div class="info"><b>S/N ${esc(e.serie)} · ${esc(e.marca)} ${esc(e.modelo)}</b>
     <small>${esc(e.cat)}${e.frec||e.diam?" · "+[txtFrec(e),txtDiam(e)].filter(Boolean).join(" / "):""}${e.fprox?` · Próx. cal.: <span class="${vencido(e)?"venc":""}">${fmt(e.fprox)}</span>`:""}</small><br>
-    <span class="tag ${claseEst(e.est)}">${e.est}</span>${tagCert(e)}${(p=>p?` <span class="tag prest${prestVencido(p)?" atr":""}">${prestVencido(p)?"⚠️ Devolución atrasada":"⏳ Devolución pendiente"} · ${esc(p.quien)}</span>`:"")(prestActivo(e))}</div></div>`).join("")
+    <span class="tag ${claseEst(e.est)}">${e.est}</span>${tagCert(e)}${tagVinculo(e)}${(p=>p?` <span class="tag prest${prestVencido(p)?" atr":""}">${prestVencido(p)?"⚠️ Devolución atrasada":"⏳ Devolución pendiente"} · ${esc(p.quien)}</span>`:"")(prestActivo(e))}</div></div>`).join("")
     :'<p style="text-align:center;color:#667085;margin-top:40px">Sin equipos. Toca + para agregar.</p>';
 }
 
@@ -574,6 +575,19 @@ function estadoCert(e){
   if(!c&&!e.fprox)return null;
   if(vencido(e))return {cls:"certven",txt:"⚠️ Certificado vencido",num};
   return {cls:"cert",txt:"✔ Certificado",num};
+}
+// Vínculo medidor ↔ transductor, visible en la lista
+function tagVinculo(e){
+  if(e.est==="Dado de baja")return "";
+  if(esTrans(e)){
+    const m=equipos.find(x=>!esTrans(x)&&x.est!=="Dado de baja"&&esAsocDe(e,x));
+    return m?` <span class="tag vinc">🔗 Medidor S/N ${esc(m.serie)}</span>`
+      :(e.asoc||"").trim()?` <span class="tag vinc">🔗 ${esc(e.asoc.trim())}</span>`:` <span class="tag sinvinc">Sin equipo asociado</span>`;
+  }
+  if(!esMedidor(e))return "";
+  const t=equipos.find(x=>esTrans(x)&&x.est!=="Dado de baja"&&esAsocDe(x,e));
+  const s=t?t.serie:(e.asoc||"").trim();
+  return s?` <span class="tag vinc">🔗 Transductor S/N ${esc(s)}</span>`:` <span class="tag sinvinc">⚠️ Sin transductor asociado</span>`;
 }
 function tagCert(e){
   const s=estadoCert(e);
