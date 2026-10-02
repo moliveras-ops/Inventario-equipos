@@ -148,7 +148,11 @@
     <div><label>Responsable de calibración</label><input id="e_rcal" placeholder="Laboratorio / técnico"></div>
     <div><label>N° certificado</label><input id="e_cert"></div>
   </div>
-  <label>Equipo asociado</label><input id="e_asoc" list="dlAsoc" placeholder="Ej.: serie del medidor al que pertenece"><datalist id="dlAsoc"></datalist>
+  <label>Equipo asociado</label><input id="e_asoc" list="dlAsoc" placeholder="Ej.: serie del medidor al que pertenece" oninput="toggleAsocTrans(true)"><datalist id="dlAsoc"></datalist>
+  <div class="grid2" id="bloqueAsocTrans" style="display:none">
+    <div><label>Frecuencia del transductor *</label><select id="e_tfrec"></select></div>
+    <div><label>Diámetro del transductor *</label><select id="e_tdiam"></select></div>
+  </div>
   <h3>Certificado de calibración de fábrica</h3>
   <div class="grid2">
     <div><label>N° certificado de fábrica</label><input id="e_fabnum"></div>
@@ -501,6 +505,7 @@ function llenarSelects(){
   e_est.innerHTML=opts(ESTADOS);
   e_frec.innerHTML='<option value="">—</option>'+FRECS.map(v=>`<option value="${v}">${v.replace(".",",")} MHz</option>`).join("");
   e_diam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
+  e_tfrec.innerHTML=e_frec.innerHTML;e_tdiam.innerHTML=e_diam.innerHTML;
 }
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const hoy=()=>new Date().toISOString().slice(0,10);
@@ -523,6 +528,15 @@ function toggleTransductor(){
   const t=/transductor/i.test(e_cat.value);
   bloqueTrans.style.display=t?"":"none";
   if(!t){e_frec.value="";e_diam.value="";}
+  if(typeof bloqueAsocTrans!=="undefined")toggleAsocTrans(false);
+}
+
+// Medidor con transductor asociado: se piden frecuencia y diámetro del transductor
+const transRegistrado=serie=>equipos.find(t=>esTrans(t)&&t.id!==actual&&refiereA(serie,t.serie));
+function toggleAsocTrans(desdeCampo){
+  const ver=!/transductor/i.test(e_cat.value)&&!!e_asoc.value.trim();
+  bloqueAsocTrans.style.display=ver?"":"none";e_tfrec.required=e_tdiam.required=ver;
+  if(ver&&desdeCampo){const t=transRegistrado(e_asoc.value);if(t){if(t.frec)e_tfrec.value=t.frec;if(t.diam)e_tdiam.value=t.diam;}}
 }
 
 /* ---------- Listado ---------- */
@@ -579,6 +593,9 @@ function editar(id){
   if(!e.id){e_est.value="Operativo";e_cat.value=fCat.value||cats[0]}
   toggleTransductor();
   if(e.frec)e_frec.value=e.frec; if(e.diam)e_diam.value=e.diam;
+  actual=e.id||null;
+  {const t=transRegistrado(e.asoc);e_tfrec.value=e.tfrec||(t&&t.frec)||"";e_tdiam.value=e.tdiam||(t&&t.diam)||"";}
+  toggleAsocTrans(false);
   fotoTmp=e.foto||null; prevFoto.src=fotoTmp||""; prevFoto.style.display=fotoTmp?"block":"none";
   e_foto.value=""; btnDel.style.display=e.id?"":"none";
   e_fabfile.value=""; fabTmp=undefined; pintarFab(e);
@@ -608,13 +625,20 @@ async function guardar(ev){
   const prev=equipos.find(x=>x.id===actual)||{};
   const e=Object.assign({},prev,{id:actual||crypto.randomUUID(),foto:fotoTmp,act:new Date().toISOString()});
   CAMPOS.forEach(c=>e[c]=document.getElementById("e_"+c).value.trim());
+  const conTrans=bloqueAsocTrans.style.display!=="none";
+  if(conTrans&&(!e_tfrec.value||!e_tdiam.value))return alert("Indica la frecuencia y el diámetro del transductor asociado.");
+  e.tfrec=conTrans?e_tfrec.value:"";e.tdiam=conTrans?e_tdiam.value:"";
   if(equipos.some(x=>(x.serie||"").toLowerCase()===e.serie.toLowerCase()&&x.id!==e.id))
     return alert("Ya existe un equipo con ese número de serie.");
   try{
     if(fabTmp===null&&prev.fabArch){await docDel(idFab(e.id));delete e.fabArch;}
     else if(fabTmp){await docPut({id:idFab(e.id),...fabTmp});e.fabArch=fabTmp.nombre;}
   }catch(err){return alert("No se pudo guardar el archivo del certificado (¿falta espacio en el teléfono?).");}
-  await dbPut(e); equipos=await dbAll(); dForm.close(); render(); ver(e.id);
+  await dbPut(e);
+  // Si el transductor está registrado y no tiene frecuencia/diámetro, se le completan
+  const tr=conTrans&&transRegistrado(e.asoc);
+  if(tr&&(!tr.frec||!tr.diam)){tr.frec=tr.frec||e.tfrec;tr.diam=tr.diam||e.tdiam;tr.act=new Date().toISOString();await dbPut(tr);}
+  equipos=await dbAll(); dForm.close(); render(); ver(e.id);
 }
 async function eliminar(){
   if(!confirm("¿Eliminar definitivamente este equipo? (Si ya no se usa, mejor márcalo como 'Dado de baja')"))return;
@@ -725,6 +749,7 @@ function transAsoc(e){
   if(esTrans(e))return "";
   const ts=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja"&&esAsocDe(t,e));
   if(ts.length)return ts.map(t=>[`S/N ${t.serie}`,[t.marca,t.modelo].filter(Boolean).join(" "),[txtFrec(t),txtDiam(t)].filter(Boolean).join(" / ")].filter(Boolean).join(" · ")).join("\n");
+  if((e.asoc||"").trim())return [`S/N ${e.asoc.trim()}`,[txtFrec({frec:e.tfrec}),txtDiam({diam:e.tdiam})].filter(Boolean).join(" / ")].filter(Boolean).join(" · ");
   const c=(e.certs||[]).slice(-1)[0];
   return c&&c.trans?c.trans+" (último certificado)":"";
 }
@@ -1027,8 +1052,11 @@ async function abrirCertCal(){
   cc_tdiam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
   cc_tserie.value="";
   // Transductor: solo se preselecciona el asignado al equipo; si no tiene, queda para elegir
-  cc_trans.value=asoc?asoc.id:"";
+  const otroAsoc=!asoc&&!esTrans(e)&&(e.asoc||"").trim();
+  cc_trans.value=asoc?asoc.id:otroAsoc?"__otro":"";
   ccTransSel();
+  if(otroAsoc)cc_tserie.value=otroAsoc;
+  if(asoc||otroAsoc){if(!cc_tfrec.value)cc_tfrec.value=e.tfrec||"";if(!cc_tdiam.value)cc_tdiam.value=e.tdiam||"";}
   ccTabla.innerHTML=`<tr style="text-align:left;color:var(--txt)"><th>Nominal (mm)</th><th>Lect. 1</th><th>Lect. 2</th><th>Lect. 3</th><th>Prom.</th><th>Error</th><th></th><th></th></tr>`;
   const pts=(ue.puntos&&ue.puntos.length?ue:g).puntos;
   (pts&&pts.length?pts.map(p=>p.nom):PUNTOS_DEF).forEach(n=>ccFila(n));
