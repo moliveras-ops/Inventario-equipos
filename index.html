@@ -498,7 +498,7 @@ const opts=(arr,todos)=>(todos?`<option value="">${todos}</option>`:"")+arr.map(
 function llenarSelects(){
   fCat.innerHTML=opts(cats,"Todas las categorías");
   e_cat.innerHTML=opts(cats);
-  const fe=fEst.value;fEst.innerHTML=opts(ESTADOS,"Todos los estados")+'<option value="__prest">⏳ Devolución pendiente</option><option value="__disp">✓ Disponibles para préstamo</option><option value="__sinv">⚠️ Sin transductor / equipo asociado</option>';fEst.value=fe;
+  const fe=fEst.value;fEst.innerHTML=opts(ESTADOS,"Todos los estados")+'<option value="__prest">⏳ Devolución pendiente</option><option value="__disp">✓ Disponibles para préstamo</option><option value="__sinv">⚠️ Sin transductor / equipo asociado</option><option value="__certv">✔ Con certificado vigente</option><option value="__certno">✖ Sin certificado vigente</option>';fEst.value=fe;
   e_est.innerHTML=opts(ESTADOS);
   e_frec.innerHTML='<option value="">—</option>'+FRECS.map(v=>`<option value="${v}">${v.replace(".",",")} MHz</option>`).join("");
   e_diam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
@@ -542,7 +542,7 @@ function toggleAsocTrans(desdeCampo){
 /* ---------- Listado ---------- */
 function filtrados(){
   const q=document.getElementById("q").value.toLowerCase().trim();
-  const okEst=e=>!fEst.value||(fEst.value==="__prest"?!!prestActivo(e):fEst.value==="__disp"?disponible(e):fEst.value==="__sinv"?/sinvinc/.test(tagVinculo(e)):e.est===fEst.value);
+  const okEst=e=>!fEst.value||(fEst.value==="__prest"?!!prestActivo(e):fEst.value==="__disp"?disponible(e):fEst.value==="__sinv"?/sinvinc/.test(tagVinculo(e)):fEst.value==="__certv"?estadoCert(e)?.cls==="cert":fEst.value==="__certno"?(()=>{const c=estadoCert(e);return !!c&&c.cls!=="cert";})():e.est===fEst.value);
   return equipos.filter(e=>(!fCat.value||e.cat===fCat.value)&&okEst(e)&&
     (!q||[e.serie,e.marca,e.modelo,e.ubic,e.rcal,txtFrec(e),txtDiam(e),prestActivo(e)?.quien,prestActivo(e)?.dest].join(" ").toLowerCase().includes(q)))
     .sort((a,b)=>(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
@@ -992,8 +992,8 @@ function etqCert(doc,e,x,y,LW,LH){
   // Campos
   doc.setTextColor(0);
   const uc=(e.certs||[]).slice().sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")||(a.emitido||"").localeCompare(b.emitido||"")).pop();
-  const quien=uc?(uc.resp||(uc.f1&&uc.f1.nombre)):"";
-  const campos=[["Marca:",e.marca],["Modelo:",e.modelo],["N° de serie:",e.serie],["Fecha:",fmt(uc&&uc.fecha>=(e.fcal||"")?uc.fecha:e.fcal)],["Responsable:",quien||e.rcal]];
+  const aprobo=uc&&uc.f2&&uc.f2.nombre||"";   // firma "Revisado / aprobado por" del último certificado
+  const campos=[["Marca:",e.marca],["Modelo:",e.modelo],["N° de serie:",e.serie],["Fecha:",fmt(uc&&uc.fecha>=(e.fcal||"")?uc.fecha:e.fcal)],["Aprobado por:",aprobo]];
   const x0=x+15.5,x1=x+LW-2.2;
   const linea=(et,val,yy)=>{
     doc.setFont(undefined,"bold");doc.setFontSize(5);doc.text(et,x+2.2,yy);
@@ -1007,8 +1007,19 @@ function etqCert(doc,e,x,y,LW,LH){
   const sd=10.2,sx=x+2,sy=y+LH-sd-1.2;
   if(selloData)doc.addImage(selloData.d,"PNG",sx,sy,sd,sd);
   else if(logoData){const w=sd,hh=w/logoData.r;doc.addImage(logoData.d,"PNG",sx,sy+(sd-hh)/2,w,hh);}
-  doc.setFont(undefined,"normal");doc.setFontSize(3.9);doc.setTextColor(60);
-  doc.text("No retirar esta etiqueta",x+sd+3.5+(LW-sd-5.5)/2,sy+sd/2+0.7,{align:"center"});
+  // Firma de quien aprobó (zona derecha, junto al sello)
+  const fz=uc&&uc.f2,zx=x+sd+3.5,zw=LW-sd-5.5;
+  if(fz&&fz.png){
+    const r=fz.r||3;let w=zw-1,hh=w/r;if(hh>7){hh=7;w=hh*r;}
+    try{doc.addImage(fz.png,"PNG",zx+(zw-w)/2,sy+7.2-hh,w,hh);}catch(err){}
+    doc.setDrawColor(90);doc.setLineWidth(0.15);doc.line(zx+1,sy+7.6,zx+zw-1,sy+7.6);
+    doc.setFont(undefined,"normal");doc.setFontSize(3.6);doc.setTextColor(60);
+    doc.text("Firma aprobación",zx+zw/2,sy+9.1,{align:"center"});
+    doc.setFontSize(3.4);doc.text("No retirar esta etiqueta",zx+zw/2,sy+sd+0.6,{align:"center"});
+  }else{
+    doc.setFont(undefined,"normal");doc.setFontSize(3.9);doc.setTextColor(60);
+    doc.text("No retirar esta etiqueta",zx+zw/2,sy+sd/2+0.7,{align:"center"});
+  }
   doc.setTextColor(0);doc.setLineWidth(0.1);doc.setDrawColor(150);
 }
 
