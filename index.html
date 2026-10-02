@@ -73,6 +73,23 @@
   .pgrp{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:10px;margin-bottom:8px}
   .pgrp a{color:var(--azul2)}
   .seg{display:flex;gap:6px}.seg button{flex:1}
+  .card .num{flex:0 0 auto;min-width:18px;align-self:center;text-align:right;font-weight:700;color:#475467;font-size:.9rem}
+  /* Vistas de la lista */
+  .vistas{display:flex;border:1px solid var(--borde);border-radius:8px;overflow:hidden;background:#fff;flex:0 0 auto}
+  .vistas button{background:#fff;color:#475467;border-radius:0;padding:8px 10px;font-size:.85rem;white-space:nowrap}
+  .vistas button+button{border-left:1px solid var(--borde)}
+  .vistas button.on{background:var(--azul2);color:#fff}
+  body.ancha main{max-width:1500px}
+  #lista.v-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px}
+  #lista.v-grid .card{margin:0}
+  #lista.v-comp .card{margin:0 0 3px;padding:4px 10px;gap:8px;align-items:center;border-radius:6px}
+  #lista.v-comp .card img,#lista.v-comp .card .ph{width:30px;height:30px;font-size:.95rem;border-radius:5px}
+  #lista.v-comp .info{display:flex;align-items:center;gap:4px 10px;flex-wrap:nowrap;white-space:nowrap}
+  #lista.v-comp .info br{display:none}
+  #lista.v-comp .info b{font-size:.92rem;flex:0 1 auto;min-width:120px}
+  #lista.v-comp .info small{font-size:.8rem;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #lista.v-comp .tag{margin-top:0;flex:0 0 auto}
+  @media (max-width:700px){#lista.v-comp .info{flex-wrap:wrap}#lista.v-comp .info b{flex-basis:100%}#lista.v-comp .info small{flex-basis:100%}.vistas button{padding:8px 7px;font-size:.78rem}}
   .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.9rem;color:var(--txt)}.chk input{width:auto}
   #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:flex;align-items:center;justify-content:center;padding:16px}
   #login .box{background:#fff;border-radius:14px;padding:24px 20px;width:min(380px,100%);box-shadow:0 10px 30px #0006}
@@ -121,6 +138,11 @@
     <input id="q" placeholder="Buscar serie, marca, modelo…" oninput="render()">
     <select id="fCat" onchange="render()"></select>
     <select id="fEst" onchange="render()"></select>
+    <div class="vistas" role="group" aria-label="Vista">
+      <button type="button" data-v="lista" onclick="setVista('lista')" title="Lista">▤ Lista</button>
+      <button type="button" data-v="grid" onclick="setVista('grid')" title="Cuadrícula">▦ Cuadrícula</button>
+      <button type="button" data-v="comp" onclick="setVista('comp')" title="Compacta">☰ Compacta</button>
+    </div>
   </div>
   <div class="aviso" id="pAviso" onclick="fEst.value='__prest';render()"></div>
   <div class="stats" id="stats"></div>
@@ -548,7 +570,15 @@ function filtrados(){
     (!q||[e.serie,e.marca,e.modelo,e.ubic,e.rcal,txtFrec(e),txtDiam(e),prestActivo(e)?.quien,prestActivo(e)?.dest].join(" ").toLowerCase().includes(q)))
     .sort((a,b)=>(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
 }
+let vista=(()=>{try{return localStorage.getItem("inv_vista")||"lista";}catch(e){return "lista";}})();
+function setVista(v){vista=v;try{localStorage.setItem("inv_vista",v);}catch(e){}aplicarVista();}
+function aplicarVista(){
+  lista.className=vista==="lista"?"":"v-"+vista;
+  document.body.classList.toggle("ancha",vista!=="lista");
+  document.querySelectorAll(".vistas button").forEach(b=>b.classList.toggle("on",b.dataset.v===vista));
+}
 function render(){
+  aplicarVista();
   if(!autorizado){lista.innerHTML="";stats.innerHTML="";pAviso.style.display="none";pBdg.style.display="none";return;}
   const l=filtrados();
   const pend=equipos.filter(e=>prestActivo(e)),atr=pend.filter(e=>prestVencido(prestActivo(e)));
@@ -558,8 +588,8 @@ function render(){
   const cnt=s=>equipos.filter(e=>e.est===s).length;
   stats.innerHTML=`<div>Total: <b>${equipos.length}</b></div><div>Operativos: <b>${cnt("Operativo")}</b></div>
     <div>Devolución pendiente: <b style="color:#6941c6">${pend.length}</b></div><div>De baja: <b>${cnt("Dado de baja")}</b></div><div>Calibración vencida: <b class="venc">${equipos.filter(vencido).length}</b></div><div>Certificados: <b style="color:var(--azul2)">${equipos.filter(e=>estadoCert(e)?.cls==="cert").length}</b></div>`;
-  lista.innerHTML=l.length?l.map(e=>`<div class="card${prestActivo(e)?" pend"+(prestVencido(prestActivo(e))?" atr":""):""}" onclick="ver('${e.id}')">
-    ${e.foto?`<img src="${e.foto}">`:`<div class="ph">${ICONOS[e.cat]||"🔧"}</div>`}
+  lista.innerHTML=l.length?l.map((e,i)=>`<div class="card${prestActivo(e)?" pend"+(prestVencido(prestActivo(e))?" atr":""):""}" onclick="ver('${e.id}')">
+    <span class="num">${i+1}</span>${e.foto?`<img src="${e.foto}">`:`<div class="ph">${ICONOS[e.cat]||"🔧"}</div>`}
     <div class="info"><b>S/N ${esc(e.serie)} · ${esc(e.marca)} ${esc(e.modelo)}</b>
     <small>${esc(e.cat)}${(f=>f.frec||f.diam?" · "+[txtFrec(f),txtDiam(f)].filter(Boolean).join(" / "):"")(fd(e))}${e.fprox?` · Próx. cal.: <span class="${vencido(e)?"venc":""}">${fmt(e.fprox)}</span>`:""}</small><br>
     <span class="tag ${claseEst(e.est)}">${e.est}</span>${tagCert(e)}${tagVinculo(e)}${(p=>p?` <span class="tag prest${prestVencido(p)?" atr":""}">${prestVencido(p)?"⚠️ Devolución atrasada":"⏳ Devolución pendiente"} · ${esc(p.quien)}</span>`:"")(prestActivo(e))}</div></div>`).join("")
