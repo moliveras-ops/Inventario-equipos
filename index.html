@@ -99,7 +99,7 @@
   #vsCuerpo.xls td{border:1px solid var(--borde);padding:4px 8px}
   #vsCuerpo.xls tr:first-child td{background:var(--azul);color:#fff;font-weight:700;position:sticky;top:0}
   .dvtodos{display:flex;align-items:center;gap:8px;font-size:.85rem;margin:2px 0 6px;flex-wrap:wrap}.dvtodos input{width:auto}.dvtodos select{width:auto;padding:6px 8px}
-  .dvlist{max-height:340px}.dvrow{border-bottom:1px solid var(--gris);padding:4px 0}.dvrow label{border:0;padding:4px 0}
+  .dvrow{border-bottom:1px solid var(--gris);padding:4px 0}.dvrow label{border:0;padding:4px 0}
   .dvdat{display:flex;gap:6px;padding:0 0 4px 24px}.dvdat select{width:auto;padding:5px 6px;font-size:.85rem}.dvdat input{flex:1;padding:5px 8px;font-size:.85rem}
   .evbar{height:8px;background:var(--gris);border-radius:4px;overflow:hidden;margin:6px 0 4px}.evbar i{display:block;height:100%;background:var(--ok)}
   .evit{display:flex;gap:6px;align-items:baseline;font-size:.86rem;padding:3px 0;border-bottom:1px dashed var(--gris);flex-wrap:wrap}
@@ -109,6 +109,14 @@
   .ptabs button small{color:#98a2b3;margin-left:2px}
   .ptabs button i{font-style:normal;margin-left:6px;background:var(--ok);color:#fff;border-radius:9px;padding:0 6px;font-size:.74rem;font-weight:700}
   .ptabs button.on{background:var(--azul2);color:#fff;border-color:var(--azul2)}.ptabs button.on small{color:#dbe7f5}
+  dialog.ancho{width:min(1150px,96vw)}
+  dialog.ancho .plist{max-height:max(300px,calc(92vh - 430px))}
+  #dPNew .plist{max-height:max(260px,calc(92vh - 640px))}
+  @media (min-width:760px){
+    .dvrow{display:flex;align-items:center;gap:10px}
+    .dvrow label{flex:1 1 50%;min-width:0}
+    .dvdat{flex:1 1 50%;padding:0}
+  }
   .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.9rem;color:var(--txt)}.chk input{width:auto}
   #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:flex;align-items:center;justify-content:center;padding:16px}
   #login .box{background:#fff;border-radius:14px;padding:24px 20px;width:min(380px,100%);box-shadow:0 10px 30px #0006}
@@ -401,7 +409,7 @@
   <div id="vsCuerpo"></div>
   <div class="acts"><button type="button" class="sec" onclick="dVisor.close()">Cerrar</button><button type="button" onclick="vsBajar()">⬇️ Descargar</button></div>
 </div></dialog>
-<dialog id="dPres"><div class="dlg">
+<dialog id="dPres" class="ancho"><div class="dlg">
   <h2>🔁 Préstamos y devoluciones</h2>
   <div class="seg"><button id="pTabA" onclick="pVista='act';pintarPres()">En préstamo</button><button id="pTabH" class="sec" onclick="pVista='hist';pintarPres()">Historial</button></div>
   <input id="pQ" placeholder="Buscar persona, destino, N° de serie…" oninput="pintarPres()" style="margin-top:8px">
@@ -415,7 +423,7 @@
 </div></dialog>
 
 <!-- Nuevo préstamo -->
-<dialog id="dPNew"><form class="dlg" onsubmit="guardarPrestamo(event)">
+<dialog id="dPNew" class="ancho"><form class="dlg" onsubmit="guardarPrestamo(event)">
   <h2>Nuevo préstamo / evento</h2>
   <label>Evento o trabajo (opcional)</label><input id="p_evt" list="dlEvt" autocomplete="off" placeholder="Ej.: Parada General Planta Arauco 2026">
   <div class="hint">Agrupa varios equipos bajo un mismo nombre para controlar cuáles vuelven y en qué condición.</div>
@@ -446,12 +454,13 @@
 </form></dialog>
 
 <!-- Devolución -->
-<dialog id="dPDev"><form class="dlg" onsubmit="guardarDevolucion(event)">
+<dialog id="dPDev" class="ancho"><form class="dlg" onsubmit="guardarDevolucion(event)">
   <h2>Registrar devolución</h2>
   <div id="dvInfo" style="font-size:.9rem;margin-bottom:8px"></div>
   <label>Equipos devueltos y condición de cada uno</label>
-  <div class="dvtodos"><span>Marcar todos</span><input type="checkbox" id="dv_all" onchange="dvSel.querySelectorAll('.dvchk').forEach(c=>c.checked=this.checked)">
-    <span style="margin-left:auto">Condición para todos:</span><select id="dv_cond" onchange="dvSel.querySelectorAll('.dvcond').forEach(x=>{x.value=this.value;dvColor(x)})"><option>Buen estado</option><option>Con observaciones</option><option>Dañado</option></select></div>
+  <div class="ptabs" id="dvTabs"></div>
+  <div class="dvtodos"><span id="dvAllTxt">Marcar todos</span><input type="checkbox" id="dv_all" onchange="dvVis('.dvchk').forEach(c=>c.checked=this.checked);dvTabsPintar()">
+    <span style="margin-left:auto" id="dvCondTxt">Condición para todos:</span><select id="dv_cond" onchange="dvVis('.dvcond').forEach(x=>{x.value=this.value;dvColor(x)})"><option>Buen estado</option><option>Con observaciones</option><option>Dañado</option></select></div>
   <div class="plist dvlist" id="dvSel"></div>
   <div class="grid2">
     <div><label>Fecha de devolución *</label><input id="dv_fecha" type="date" required></div>
@@ -1518,6 +1527,21 @@ async function guardarPrestamo(ev){
 }
 
 const COND_COLOR={"Buen estado":"var(--ok)","Con observaciones":"var(--cal)","Dañado":"var(--baja)"};
+// Pestañas por categoría en la devolución (solo filtran la vista; las marcas y condiciones se conservan)
+let dvCat="";
+const dvFilas=()=>[...dvSel.querySelectorAll(".dvrow")];
+const dvVis=sel=>dvFilas().filter(r=>!dvCat||r.dataset.cat===dvCat).map(r=>r.querySelector(sel));
+function dvTab(c){dvCat=c;dvTabsPintar();}
+function dvTabsPintar(){
+  const f=dvFilas(),cats=unicos(f.map(r=>r.dataset.cat)),chk=r=>r.querySelector(".dvchk").checked;
+  const tab=(c,txt)=>{const g=f.filter(r=>!c||r.dataset.cat===c),k=g.filter(chk).length;
+    return `<button type="button" class="${dvCat===c?"on":""}" onclick="dvTab('${esc(c.replace(/'/g,"\\'"))}')">${txt} <small>${g.length}</small>${k?`<i>✓${k}</i>`:""}</button>`;};
+  dvTabs.innerHTML=cats.length>1?tab("","Todas")+cats.map(c=>tab(c,`${ICONOS[c]||"🔧"} ${esc(c)}`)).join(""):"";
+  f.forEach(r=>r.style.display=!dvCat||r.dataset.cat===dvCat?"":"none");
+  const v=dvVis(".dvchk");dv_all.checked=v.length>0&&v.every(c=>c.checked);
+  dvAllTxt.textContent=dvCat?"Marcar todos los de esta pestaña":"Marcar todos";
+  dvCondTxt.textContent=dvCat?"Condición para esta pestaña:":"Condición para todos:";
+}
 function dvColor(x){x.style.color=COND_COLOR[x.value]||"";x.style.fontWeight="600";}
 /* Devolución (total o parcial de un préstamo) */
 function abrirDevolucion(gid,soloId){
@@ -1527,11 +1551,12 @@ function abrirDevolucion(gid,soloId){
   const p=eqs[0].prestamos.find(x=>x.gid===gid&&!x.dev);
   dvInfo.innerHTML=`Prestado a <b>${esc(p.quien)}</b> · ${esc(p.dest)} · salida ${fmt(p.sal)} <small style="color:#667085">(${numActa(p)})</small>`;
   dvInfo.innerHTML=(p.evt?`<b style="color:var(--azul)">📋 ${esc(p.evt)}</b><br>`:"")+dvInfo.innerHTML;
-  dvSel.innerHTML=eqs.map(e=>`<div class="dvrow"><label><input type="checkbox" class="dvchk" value="${e.id}" ${!soloId||soloId===e.id?"checked":""}>
+  eqs.sort((a,b)=>(a.cat+a.serie).localeCompare(b.cat+b.serie,"es",{numeric:true}));
+  dvSel.innerHTML=eqs.map(e=>`<div class="dvrow" data-cat="${esc(e.cat)}"><label><input type="checkbox" class="dvchk" value="${e.id}" ${!soloId||soloId===e.id?"checked":""} onchange="dvTabsPintar()">
     <span>${ICONOS[e.cat]||"🔧"} <b>S/N ${esc(e.serie)}</b> · ${esc(e.cat)} <small style="color:#667085">${esc([e.marca,e.modelo].filter(Boolean).join(" "))}</small></span></label>
     <div class="dvdat"><select class="dvcond" data-id="${e.id}" onchange="dvColor(this)"><option>Buen estado</option><option>Con observaciones</option><option>Dañado</option></select>
     <input class="dvobs" data-id="${e.id}" placeholder="Observación de este equipo (opcional)"></div></div>`).join("");
-  dv_all.checked=!soloId;dvSel.querySelectorAll(".dvcond").forEach(dvColor);
+  dvCat="";dvTabsPintar();dvSel.querySelectorAll(".dvcond").forEach(dvColor);
   llenarDatalists();
   dv_fecha.value=hoy();dv_recibe.value=p.entrega||"";dv_cond.value="Buen estado";dvSel.querySelectorAll(".dvcond").forEach(x=>{x.value="Buen estado";dvColor(x)});dv_obs.value="";dv_rep.checked=true;
   dDet.open&&dDet.close();dPDev.showModal();
