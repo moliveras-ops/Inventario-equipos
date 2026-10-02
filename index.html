@@ -148,7 +148,7 @@
     <div><label>Responsable de calibración</label><input id="e_rcal" placeholder="Laboratorio / técnico"></div>
     <div><label>N° certificado</label><input id="e_cert"></div>
   </div>
-  <label>Equipo asociado</label><input id="e_asoc" placeholder="Ej.: serie del medidor al que pertenece">
+  <label>Equipo asociado</label><input id="e_asoc" list="dlAsoc" placeholder="Ej.: serie del medidor al que pertenece"><datalist id="dlAsoc"></datalist>
   <h3>Certificado de calibración de fábrica</h3>
   <div class="grid2">
     <div><label>N° certificado de fábrica</label><input id="e_fabnum"></div>
@@ -542,7 +542,7 @@ function render(){
   pAviso.innerHTML=`⏳ <b>${pend.length}</b> ${pend.length===1?"equipo con devolución pendiente":"equipos con devolución pendiente"}${atr.length?` · <b>⚠️ ${atr.length} atrasado${atr.length>1?"s":""}</b>`:""} — toca para ver`;
   const cnt=s=>equipos.filter(e=>e.est===s).length;
   stats.innerHTML=`<div>Total: <b>${equipos.length}</b></div><div>Operativos: <b>${cnt("Operativo")}</b></div>
-    <div>Devolución pendiente: <b style="color:#6941c6">${pend.length}</b></div><div>De baja: <b>${cnt("Dado de baja")}</b></div><div>Calibración vencida: <b class="venc">${equipos.filter(vencido).length}</b></div>`;
+    <div>Devolución pendiente: <b style="color:#6941c6">${pend.length}</b></div><div>De baja: <b>${cnt("Dado de baja")}</b></div><div>Calibración vencida: <b class="venc">${equipos.filter(vencido).length}</b></div><div>Certificados: <b style="color:var(--azul2)">${equipos.filter(e=>estadoCert(e)?.cls==="cert").length}</b></div>`;
   lista.innerHTML=l.length?l.map(e=>`<div class="card${prestActivo(e)?" pend"+(prestVencido(prestActivo(e))?" atr":""):""}" onclick="ver('${e.id}')">
     ${e.foto?`<img src="${e.foto}">`:`<div class="ph">${ICONOS[e.cat]||"🔧"}</div>`}
     <div class="info"><b>S/N ${esc(e.serie)} · ${esc(e.marca)} ${esc(e.modelo)}</b>
@@ -552,12 +552,20 @@ function render(){
 }
 
 // Distintivo de certificación según el último certificado emitido
-function tagCert(e){
-  const c=(e.certs||[]).slice(-1)[0];if(!c)return "";
-  if(!c.cumple)return ` <span class="tag certno">✖ No conforme · ${esc(c.num)}</span>`;
-  if(vencido(e))return ` <span class="tag certven">⚠️ Certificado vencido · ${esc(c.num)}</span>`;
-  return ` <span class="tag cert">✔ Certificado · ${esc(c.num)}</span>`;
+// Estado de certificación: según el último certificado emitido en la app o, si no hay, según la fecha de próxima calibración
+function estadoCert(e){
+  if(e.est==="Dado de baja")return null;
+  const c=(e.certs||[]).slice(-1)[0],num=c?c.num:(e.cert||"");
+  if(c&&!c.cumple)return {cls:"certno",txt:"✖ No conforme",num};
+  if(!c&&!e.fprox)return null;
+  if(vencido(e))return {cls:"certven",txt:"⚠️ Certificado vencido",num};
+  return {cls:"cert",txt:"✔ Certificado",num};
 }
+function tagCert(e){
+  const s=estadoCert(e);
+  return s?` <span class="tag ${s.cls}">${s.txt}${s.num?" · "+esc(s.num):""}</span>`:"";
+}
+const txtCert=e=>{const s=estadoCert(e);return s?s.txt.replace(/^\S+\s/,"")+(s.num?" · "+s.num:""):"";};
 
 /* ---------- Formulario ---------- */
 const CAMPOS=["cat","serie","marca","modelo","est","ubic","frec","diam","fcal","fprox","rcal","cert","asoc","obs","fabnum","fabfecha"];
@@ -567,6 +575,7 @@ function editar(id){
   const e=equipos.find(x=>x.id===id)||{};
   fTit.textContent=e.id?"Editar equipo":"Nuevo equipo";
   CAMPOS.forEach(c=>document.getElementById("e_"+c).value=e[c]||"");
+  dlAsoc.innerHTML=equipos.filter(x=>x.id!==e.id&&x.est!=="Dado de baja").map(x=>`<option value="${esc(x.serie)}">${esc(x.cat)} · ${esc([x.marca,x.modelo].filter(Boolean).join(" "))}</option>`).join("");
   if(!e.id){e_est.value="Operativo";e_cat.value=fCat.value||cats[0]}
   toggleTransductor();
   if(e.frec)e_frec.value=e.frec; if(e.diam)e_diam.value=e.diam;
@@ -628,7 +637,7 @@ function ver(id){
   const e=equipos.find(x=>x.id===id||x.serie===id); if(!e)return;
   actual=e.id; dTit.textContent=`S/N ${e.serie} — ${e.cat}`;
   dFoto.src=e.foto||""; dFoto.style.display=e.foto?"block":"none";
-  const filas=[["Marca",e.marca],["Modelo",e.modelo],["Estado",e.est],["Frecuencia",txtFrec(e)],["Diámetro",txtDiam(e)],
+  const filas=[["Marca",e.marca],["Modelo",e.modelo],["Estado",e.est],["Certificación",txtCert(e)],["Frecuencia",txtFrec(e)],["Diámetro",txtDiam(e)],
     ["Ubicación / responsable",e.ubic],["Última calibración",fmt(e.fcal)],["Próxima calibración",e.fprox?fmt(e.fprox)+(vencido(e)?" ⚠️ VENCIDA":""):""],
     ["Responsable calibración",e.rcal],["Certificado",e.cert],["Cert. de fábrica",[e.fabnum,fmt(e.fabfecha),e.fabArch?"📎 adjunto":""].filter(Boolean).join(" · ")],["Equipo asociado",e.asoc],["Transductor asociado",transAsoc(e)],["Observaciones",e.obs]];
   dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1]).replace(/\n/g,"<br>")}</td></tr>`).join("");
@@ -639,7 +648,7 @@ function ver(id){
   const cc=(e.certs||[]).slice().reverse();
   dCerts.innerHTML=cc.length?`<h3>Certificados de calibración emitidos</h3>`+cc.map(c=>`<div class="catrow" style="font-size:.88rem;border-bottom:1px solid var(--gris);padding:4px 0">
     <span><b>${esc(c.num)}</b> · ${fmt(c.fecha)} · <span style="color:${c.cumple?"var(--ok)":"var(--baja)"};font-weight:600">${c.cumple?"Conforme":"No conforme"}</span></span>
-    <button class="sec" style="padding:6px 10px" onclick="certCalPDF('${e.id}','${esc(c.num)}')">PDF</button></div>`).join(""):"";
+    <span style="display:flex;gap:6px"><button class="sec" style="padding:6px 10px" onclick="certCalPDF('${e.id}','${esc(c.num)}')">PDF</button><button class="del" style="padding:6px 10px" title="Eliminar certificado" onclick="eliminarCertCal('${e.id}','${esc(c.num)}')">🗑️</button></span></div>`).join(""):"";
   qrBox.innerHTML=""; new QRCode(qrBox,{text:urlEq(e.id),width:160,height:160,correctLevel:QRCode.CorrectLevel.M});
   qrPie.innerHTML=`<b>S/N ${esc(e.serie)}</b><br>`+lineasEtiqueta(e).map(esc).join("<br>");
   dDet.open||dDet.showModal();
@@ -699,7 +708,7 @@ function numerarPaginas(doc){
 }
 
 /* ---------- Exportaciones ---------- */
-const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["modelo","Modelo"],["est","Estado"],
+const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["modelo","Modelo"],["est","Estado"],["certest","Certificación"],
   ["frec","Frecuencia"],["diam","Diámetro"],["ubic","Ubicación"],["fcal","Últ. calibración"],["fprox","Próx. calibración"],
   ["rcal","Resp. calibración"],["cert","Certificado"],["asoc","Asociado a"],["trans","Transductor asociado"],["obs","Observaciones"],
   ["fabnum","Cert. fábrica N°"],["fabfecha","Fecha cert. fábrica"],["prest","Préstamo actual"]];
@@ -707,7 +716,11 @@ const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["model
 // si no hay, el transductor usado en su último certificado de calibración.
 // ¿El transductor t está asignado al equipo e? (compara N° de serie, ignorando mayúsculas, espacios y "S/N")
 const limpiaSerie=v=>(v||"").toLowerCase().replace(/^\s*s\/?n[°º:.\s]*/,"").replace(/\s+/g,"");
-const esAsocDe=(t,e)=>!!limpiaSerie(t.asoc)&&limpiaSerie(t.asoc)===limpiaSerie(e.serie);
+// Admite el N° de serie solo o dentro de un texto ("Dakota ZX-3 S/N 20701"), y también la asignación hecha desde el medidor
+const tokens=v=>(v||"").toLowerCase().split(/[^a-z0-9\-]+/).filter(Boolean);
+const refiereA=(txt,serie)=>{const s=limpiaSerie(serie);if(!s||!txt)return false;
+  return limpiaSerie(txt)===s||(s.length>=4&&tokens(txt).some(x=>x===s||x.replace(/^0+/,"")===s.replace(/^0+/,"")));};
+const esAsocDe=(t,e)=>refiereA(t.asoc,e.serie)||refiereA(e.asoc,t.serie);
 function transAsoc(e){
   if(esTrans(e))return "";
   const ts=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja"&&esAsocDe(t,e));
@@ -720,6 +733,7 @@ function valor(e,k){
   if(k==="frec")return txtFrec(e);
   if(k==="diam")return txtDiam(e);
   if(k==="trans")return transAsoc(e);
+  if(k==="certest")return txtCert(e);
   if(k==="prest"){const p=prestActivo(e);return p?`${p.quien} — ${p.dest} (desde ${fmt(p.sal)})`:"";}
   return e[k]||"";
 }
@@ -1097,6 +1111,19 @@ async function emitirCertCal(ev){
   if(m)await cfgSet("certSeq_"+m[1],Math.max(parseInt(m[2]),(await cfgGet("certSeq_"+m[1]))||0));
   equipos=await dbAll();dCC.close();render();
   ver(e.id);
+}
+async function eliminarCertCal(id,num){
+  const e=equipos.find(x=>x.id===id);if(!e)return;
+  if(!confirm(`¿Eliminar el certificado ${num} del equipo S/N ${e.serie}?\n\nEsta acción no se puede deshacer.`))return;
+  e.certs=(e.certs||[]).filter(c=>c.num!==num);
+  // Si era el certificado vigente de la ficha, se vuelve a los datos del certificado anterior (o se limpian)
+  if(e.cert===num){
+    const p=e.certs.slice(-1)[0];
+    if(p){e.fcal=p.fecha;e.fprox=p.prox;e.rcal=p.resp;e.cert=p.num;}
+    else{e.fcal="";e.fprox="";e.cert="";}
+  }
+  e.act=new Date().toISOString();
+  await dbPut(e);equipos=await dbAll();render();ver(id);
 }
 const fechaLocalISO=iso=>{const d=new Date(iso);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 function certCalPDF(id,num){
