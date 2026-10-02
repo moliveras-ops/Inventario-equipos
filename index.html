@@ -98,6 +98,7 @@
   <p>Acceso restringido. Inicia sesión para ver y editar el inventario.</p>
   <label>Correo</label><input id="lg_mail" type="email" required autocomplete="username" inputmode="email">
   <label>Contraseña</label><input id="lg_pass" type="password" required autocomplete="current-password">
+  <label class="chk"><input type="checkbox" id="lg_rec" checked> Recordar contraseña en este dispositivo</label>
   <button type="submit" id="lgBtn">Iniciar sesión</button>
   <a href="#" class="lnk" onclick="loginRecuperar();return false">¿Olvidaste tu contraseña?</a>
   </div>
@@ -1516,7 +1517,28 @@ async function sesionCambio(email){
   if(email===null&&previa)await borrarLocal();   // la sesión se cerró o expiró: no dejar datos en el teléfono
   login.style.display="flex";lgEstado("");
   if(email===undefined)lgMensaje("Sin conexión. El primer ingreso en este dispositivo requiere internet.");
-  setTimeout(()=>lg_mail.focus(),50);
+  lgRellenar();
+}
+/* Recordar contraseña: se guarda en el gestor de contraseñas del navegador (cifrado), nunca en texto plano */
+const LG_KEY="inv_recordar";
+function lgPrefs(){try{return JSON.parse(localStorage.getItem(LG_KEY))||{rec:true};}catch(e){return {rec:true};}}
+async function lgRellenar(){
+  const p=lgPrefs();lg_rec.checked=p.rec!==false;
+  if(p.rec!==false&&p.mail&&!lg_mail.value)lg_mail.value=p.mail;
+  if(p.rec!==false&&window.PasswordCredential&&!lg_pass.value){
+    try{const c=await navigator.credentials.get({password:true,mediation:"optional"});
+      if(c&&c.password){lg_mail.value=c.id;lg_pass.value=c.password;}}catch(e){}
+  }
+  setTimeout(()=>(lg_mail.value?lg_pass:lg_mail).focus(),50);
+}
+async function lgGuardar(mail,clave){
+  const rec=lg_rec.checked;
+  try{localStorage.setItem(LG_KEY,JSON.stringify(rec?{rec:true,mail}:{rec:false}));}catch(e){}
+  if(rec&&window.PasswordCredential){
+    try{await navigator.credentials.store(new PasswordCredential({id:mail,password:clave,name:mail}));}catch(e){}
+  }else if(!rec&&navigator.credentials&&navigator.credentials.preventSilentAccess){
+    try{await navigator.credentials.preventSilentAccess();}catch(e){}
+  }
 }
 function finEspera(){if(!esperandoDatos)return;esperandoDatos=false;login.style.display="none";lgEstado("");abrirHash();}
 async function borrarLocal(){
@@ -1530,7 +1552,8 @@ async function loginEntrar(ev){
   ev.preventDefault();
   if(!window.Sync)return lgMensaje("Sin conexión con el servidor. Revisa tu señal e intenta de nuevo.");
   lgBtn.disabled=true;lgBtn.textContent="Ingresando…";lgMensaje("");
-  try{await Sync.entrar(lg_mail.value.trim(),lg_pass.value);}
+  const mail=lg_mail.value.trim(),clave=lg_pass.value;
+  try{await Sync.entrar(mail,clave);await lgGuardar(mail,clave);}
   catch(e){lgMensaje(msgAuth(e));}
   lgBtn.disabled=false;lgBtn.textContent="Iniciar sesión";
 }

@@ -1,4 +1,4 @@
-const CACHE = "inventario-v1.43";
+const CACHE = "inventario-v1.44";
 const CDN = ["cdnjs.cloudflare.com", "cdn.jsdelivr.net", "www.gstatic.com"];
 const ARCHIVOS = [
   "./", "index.html", "sync.js", "firebase-config.js", "manifest.json", "icon-192.png", "icon-512.png", "logo-iqs.png", "logo-iqs-sello.png", "logo-iqs-hd.png",
