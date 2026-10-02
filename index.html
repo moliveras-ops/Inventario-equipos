@@ -1026,13 +1026,9 @@ async function abrirCertCal(){
   cc_tfrec.innerHTML='<option value="">—</option>'+FRECS.map(v=>`<option value="${v}">${v.replace(".",",")} MHz</option>`).join("");
   cc_tdiam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
   cc_tserie.value="";
-  // Transductor: el asignado al equipo; si no tiene, el del último certificado de este equipo; si no, el del último certificado emitido
-  const tc=asoc?null:ue.tserie?ue:g;
-  if(tc&&tc.transId&&trans.some(t=>t.id===tc.transId))cc_trans.value=tc.transId;
-  else if(tc&&tc.tserie&&!tc.transId){cc_trans.value="__otro";cc_tserie.value=tc.tserie;}
-  else cc_trans.value=asoc?asoc.id:"";
+  // Transductor: solo se preselecciona el asignado al equipo; si no tiene, queda para elegir
+  cc_trans.value=asoc?asoc.id:"";
   ccTransSel();
-  if(cc_trans.value==="__otro"){cc_tfrec.value=tc.tfrec||"";cc_tdiam.value=tc.tdiam||"";}
   ccTabla.innerHTML=`<tr style="text-align:left;color:var(--txt)"><th>Nominal (mm)</th><th>Lect. 1</th><th>Lect. 2</th><th>Lect. 3</th><th>Prom.</th><th>Error</th><th></th><th></th></tr>`;
   const pts=(ue.puntos&&ue.puntos.length?ue:g).puntos;
   (pts&&pts.length?pts.map(p=>p.nom):PUNTOS_DEF).forEach(n=>ccFila(n));
