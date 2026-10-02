@@ -284,7 +284,7 @@
 </div></dialog>
 
 <!-- Certificado de calibración -->
-<dialog id="dCC"><form class="dlg" onsubmit="emitirCertCal(event)">
+<dialog id="dCC"><form class="dlg" onsubmit="emitirCertCal(event)" novalidate>
   <h2 id="ccTit">Certificado de calibración</h2>
   <div class="grid2">
     <div><label>N° de certificado *</label><input id="cc_num" required></div>
@@ -1025,7 +1025,7 @@ async function abrirCertCal(){
   await cargarFirmas();
   const porNombre=firmas.find(f=>norm(f.nombre)===norm(respPrev));
   const fs=ue.f1||ue.f2?ue:g;
-  llenarSelFirmas(fs.f1&&fs.f1.id||(porNombre?porNombre.id:""),fs.f2&&fs.f2.id||"");
+  llenarSelFirmas(fs.f1&&fs.f1.id||(porNombre?porNombre.id:"")||(firmas.length===1?firmas[0].id:""),fs.f2&&fs.f2.id||"");
   ccCalc();dDet.close();dCC.showModal();
 }
 function ccTransSel(){
@@ -1063,8 +1063,16 @@ function ccCalc(){
   ccRes.innerHTML=!v.length?"":v.every(p=>p.ok)?`<span style="color:var(--ok)">Resultado: CONFORME (${v.length} puntos dentro de ±${cc_tol.value} mm)</span>`
     :`<span class="venc">Resultado: NO CONFORME (${v.filter(p=>!p.ok).length} de ${v.length} puntos fuera de tolerancia)</span>`;
 }
+// Si falta un campo obligatorio, avisar cuáles y llevar la vista al primero (antes el aviso podía quedar fuera de pantalla)
+function ccFaltantes(){
+  return [...dCC.querySelectorAll("input,select,textarea")].filter(x=>!x.checkValidity()&&x.offsetParent!==null)
+    .map(x=>({x,n:(x.closest("div")?.querySelector("label")?.textContent||x.id).replace(/\s*\*\s*$/,"")}));
+}
 async function emitirCertCal(ev){
   ev.preventDefault();
+  const falta=ccFaltantes();
+  if(falta.length){falta[0].x.scrollIntoView({block:"center"});falta[0].x.focus();
+    return alert("Faltan datos obligatorios:\n• "+falta.map(f=>f.n).join("\n• "));}
   const e=actualEq(),v=ccPuntos().filter(p=>!p.vacio);
   if(!v.length)return alert("Ingresa al menos un punto con su valor nominal y una lectura.");
   const num=cc_num.value.trim();
