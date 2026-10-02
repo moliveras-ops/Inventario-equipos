@@ -36,6 +36,7 @@
   .card b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .card small{color:#667085}
   .tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:10px;color:#fff;margin-top:4px}
+  .tag.cert{background:var(--azul2)}.tag.certno{background:var(--baja)}.tag.certven{background:var(--cal)}
   .Operativo{background:var(--ok)}.baja{background:var(--baja)}.cal{background:var(--cal)}
   .fab{position:fixed;right:18px;bottom:18px;width:58px;height:58px;border-radius:50%;font-size:2rem;box-shadow:0 4px 12px #0004}
   dialog{border:0;border-radius:12px;padding:0;width:min(600px,96vw);max-height:92vh}
@@ -315,7 +316,7 @@
   <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="cc_act" checked style="width:auto"> Actualizar en la ficha: fecha de calibración, responsable y N° de certificado</label>
   <div class="acts">
     <button type="button" class="sec" onclick="dCC.close()">Cancelar</button>
-    <button type="submit">Emitir y descargar PDF</button>
+    <button type="submit">Emitir certificado</button>
   </div>
 </form></dialog>
 
@@ -546,8 +547,16 @@ function render(){
     ${e.foto?`<img src="${e.foto}">`:`<div class="ph">${ICONOS[e.cat]||"🔧"}</div>`}
     <div class="info"><b>S/N ${esc(e.serie)} · ${esc(e.marca)} ${esc(e.modelo)}</b>
     <small>${esc(e.cat)}${e.frec||e.diam?" · "+[txtFrec(e),txtDiam(e)].filter(Boolean).join(" / "):""}${e.fprox?` · Próx. cal.: <span class="${vencido(e)?"venc":""}">${fmt(e.fprox)}</span>`:""}</small><br>
-    <span class="tag ${claseEst(e.est)}">${e.est}</span>${(p=>p?` <span class="tag prest${prestVencido(p)?" atr":""}">${prestVencido(p)?"⚠️ Devolución atrasada":"⏳ Devolución pendiente"} · ${esc(p.quien)}</span>`:"")(prestActivo(e))}</div></div>`).join("")
+    <span class="tag ${claseEst(e.est)}">${e.est}</span>${tagCert(e)}${(p=>p?` <span class="tag prest${prestVencido(p)?" atr":""}">${prestVencido(p)?"⚠️ Devolución atrasada":"⏳ Devolución pendiente"} · ${esc(p.quien)}</span>`:"")(prestActivo(e))}</div></div>`).join("")
     :'<p style="text-align:center;color:#667085;margin-top:40px">Sin equipos. Toca + para agregar.</p>';
+}
+
+// Distintivo de certificación según el último certificado emitido
+function tagCert(e){
+  const c=(e.certs||[]).slice(-1)[0];if(!c)return "";
+  if(!c.cumple)return ` <span class="tag certno">✖ No conforme · ${esc(c.num)}</span>`;
+  if(vencido(e))return ` <span class="tag certven">⚠️ Certificado vencido · ${esc(c.num)}</span>`;
+  return ` <span class="tag cert">✔ Certificado · ${esc(c.num)}</span>`;
 }
 
 /* ---------- Formulario ---------- */
@@ -696,10 +705,12 @@ const COLS=[["serie","N° serie"],["cat","Categoría"],["marca","Marca"],["model
   ["fabnum","Cert. fábrica N°"],["fabfecha","Fecha cert. fábrica"],["prest","Préstamo actual"]];
 // Transductor(es) asociado(s) a un medidor: los que tienen este equipo en "Equipo asociado";
 // si no hay, el transductor usado en su último certificado de calibración.
+// ¿El transductor t está asignado al equipo e? (compara N° de serie, ignorando mayúsculas, espacios y "S/N")
+const limpiaSerie=v=>(v||"").toLowerCase().replace(/^\s*s\/?n[°º:.\s]*/,"").replace(/\s+/g,"");
+const esAsocDe=(t,e)=>!!limpiaSerie(t.asoc)&&limpiaSerie(t.asoc)===limpiaSerie(e.serie);
 function transAsoc(e){
   if(esTrans(e))return "";
-  const s=(e.serie||"").toLowerCase();
-  const ts=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja"&&(t.asoc||"").trim().toLowerCase()===s);
+  const ts=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja"&&esAsocDe(t,e));
   if(ts.length)return ts.map(t=>[`S/N ${t.serie}`,[t.marca,t.modelo].filter(Boolean).join(" "),[txtFrec(t),txtDiam(t)].filter(Boolean).join(" / ")].filter(Boolean).join(" · ")).join("\n");
   const c=(e.certs||[]).slice(-1)[0];
   return c&&c.trans?c.trans+" (último certificado)":"";
@@ -986,28 +997,35 @@ async function sigNumCert(){
   return {num,n,k};
 }
 async function abrirCertCal(){
-  const e=actualEq(),u=(e.certs||[]).slice(-1)[0]||{};
+  const e=actualEq(),ue=(e.certs||[]).slice(-1)[0]||{};
+  // Último certificado emitido en toda la app (cualquier equipo): sus datos se reutilizan como valores por defecto
+  const g=equipos.flatMap(x=>x.certs||[]).sort((a,b)=>(a.emitido||a.fecha||"").localeCompare(b.emitido||b.fecha||"")).slice(-1)[0]||{};
+  const u=k=>ue[k]||g[k]||"";
   ccTit.textContent=`Certificado de calibración — S/N ${e.serie}`;
   cc_num.value=(await sigNumCert()).num;
-  cc_fecha.value=hoy();const respPrev=e.rcal||u.resp||"";cc_lugar.value=u.lugar||"";
-  cc_vel.value=u.vel||"5920";cc_patserie.value=u.patserie||"";cc_patron.value=u.patron||PATRON_DEF;cc_patcert.value=u.patcert||"";cc_temp.value="";cc_tol.value=u.tol||"0.1";cc_obs.value="";
+  cc_fecha.value=hoy();const respPrev=e.rcal||u("resp");cc_lugar.value=u("lugar");
+  cc_vel.value=u("vel")||"5920";cc_patserie.value=u("patserie");cc_patron.value=u("patron")||PATRON_DEF;cc_patcert.value=u("patcert");cc_temp.value=u("temp");cc_tol.value=u("tol")||"0.1";cc_obs.value="";
   const trans=equipos.filter(t=>esTrans(t)&&t.est!=="Dado de baja");
-  const asoc=trans.find(t=>(t.asoc||"").toLowerCase()===e.serie.toLowerCase());
+  const asoc=trans.find(t=>esAsocDe(t,e));
   cc_trans.innerHTML='<option value="">— Selecciona —</option>'+trans.map(t=>`<option value="${t.id}">S/N ${esc(t.serie)} · ${esc([t.marca,t.modelo].filter(Boolean).join(" "))} · ${esc([txtFrec(t),txtDiam(t)].filter(Boolean).join(" / "))}</option>`).join("")
     +'<option value="__otro">✏️ Otro (escribir N° de serie)</option>';
   cc_tfrec.innerHTML='<option value="">—</option>'+FRECS.map(v=>`<option value="${v}">${v.replace(".",",")} MHz</option>`).join("");
   cc_tdiam.innerHTML='<option value="">—</option>'+DIAMS.map(v=>`<option value="${v}">${v} mm</option>`).join("");
   cc_tserie.value="";
-  if(u.transId&&trans.some(t=>t.id===u.transId))cc_trans.value=u.transId;
-  else if(u.tserie&&!u.transId){cc_trans.value="__otro";cc_tserie.value=u.tserie;}
+  // Transductor: el asignado al equipo; si no tiene, el del último certificado de este equipo; si no, el del último certificado emitido
+  const tc=asoc?null:ue.tserie?ue:g;
+  if(tc&&tc.transId&&trans.some(t=>t.id===tc.transId))cc_trans.value=tc.transId;
+  else if(tc&&tc.tserie&&!tc.transId){cc_trans.value="__otro";cc_tserie.value=tc.tserie;}
   else cc_trans.value=asoc?asoc.id:"";
   ccTransSel();
-  if(cc_trans.value==="__otro"){cc_tfrec.value=u.tfrec||"";cc_tdiam.value=u.tdiam||"";}
+  if(cc_trans.value==="__otro"){cc_tfrec.value=tc.tfrec||"";cc_tdiam.value=tc.tdiam||"";}
   ccTabla.innerHTML=`<tr style="text-align:left;color:var(--txt)"><th>Nominal (mm)</th><th>Lect. 1</th><th>Lect. 2</th><th>Lect. 3</th><th>Prom.</th><th>Error</th><th></th><th></th></tr>`;
-  (u.puntos&&u.puntos.length?u.puntos.map(p=>p.nom):PUNTOS_DEF).forEach(n=>ccFila(n));
+  const pts=(ue.puntos&&ue.puntos.length?ue:g).puntos;
+  (pts&&pts.length?pts.map(p=>p.nom):PUNTOS_DEF).forEach(n=>ccFila(n));
   await cargarFirmas();
   const porNombre=firmas.find(f=>norm(f.nombre)===norm(respPrev));
-  llenarSelFirmas(u.f1&&u.f1.id||(porNombre?porNombre.id:""),u.f2&&u.f2.id||"");
+  const fs=ue.f1||ue.f2?ue:g;
+  llenarSelFirmas(fs.f1&&fs.f1.id||(porNombre?porNombre.id:""),fs.f2&&fs.f2.id||"");
   ccCalc();dDet.close();dCC.showModal();
 }
 function ccTransSel(){
@@ -1070,7 +1088,7 @@ async function emitirCertCal(ev){
   const sq=await sigNumCert(),m=num.match(/^IQS-CAL-(\d{4})-(\d+)$/);
   if(m)await cfgSet("certSeq_"+m[1],Math.max(parseInt(m[2]),(await cfgGet("certSeq_"+m[1]))||0));
   equipos=await dbAll();dCC.close();render();
-  certCalPDF(e.id,num);ver(e.id);
+  ver(e.id);
 }
 const fechaLocalISO=iso=>{const d=new Date(iso);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 function certCalPDF(id,num){
