@@ -90,6 +90,14 @@
   #lista.v-comp .info small{font-size:.8rem;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
   #lista.v-comp .tag{margin-top:0;flex:0 0 auto}
   @media (max-width:700px){#lista.v-comp .info{flex-wrap:wrap}#lista.v-comp .info b{flex-basis:100%}#lista.v-comp .info small{flex-basis:100%}.vistas button{padding:8px 7px;font-size:.78rem}}
+  dialog.visor{width:min(900px,96vw)}
+  #vsCuerpo{max-height:70vh;overflow:auto;border-radius:8px}
+  #vsCuerpo.pdf{background:#525659;padding:8px}
+  #vsCuerpo.pdf canvas{display:block;margin:0 auto 8px;max-width:100%;background:#fff;box-shadow:0 2px 8px #0005}
+  #vsCuerpo.xls{border:1px solid var(--borde)}
+  #vsCuerpo.xls table{border-collapse:collapse;font-size:.78rem;white-space:nowrap}
+  #vsCuerpo.xls td{border:1px solid var(--borde);padding:4px 8px}
+  #vsCuerpo.xls tr:first-child td{background:var(--azul);color:#fff;font-weight:700;position:sticky;top:0}
   .chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.9rem;color:var(--txt)}.chk input{width:auto}
   #login{position:fixed;inset:0;z-index:50;background:linear-gradient(160deg,var(--azul),#06233f);display:flex;align-items:center;justify-content:center;padding:16px}
   #login .box{background:#fff;border-radius:14px;padding:24px 20px;width:min(380px,100%);box-shadow:0 10px 30px #0006}
@@ -376,6 +384,12 @@
 </div></dialog>
 
 <!-- Préstamos -->
+<!-- Visor de documentos: muestra el PDF / Excel y permite descargarlo -->
+<dialog id="dVisor" class="visor" onclose="vsCerrar()"><div class="dlg">
+  <h2 id="vsTit"></h2>
+  <div id="vsCuerpo"></div>
+  <div class="acts"><button type="button" class="sec" onclick="dVisor.close()">Cerrar</button><button type="button" onclick="vsBajar()">⬇️ Descargar</button></div>
+</div></dialog>
 <dialog id="dPres"><div class="dlg">
   <h2>🔁 Préstamos y devoluciones</h2>
   <div class="seg"><button id="pTabA" onclick="pVista='act';pintarPres()">En préstamo</button><button id="pTabH" class="sec" onclick="pVista='hist';pintarPres()">Historial</button></div>
@@ -409,7 +423,7 @@
   <label>Firma de quien retira</label>
   <canvas id="p_firma" class="sig"></canvas>
   <div class="acts" style="justify-content:flex-start;margin-top:4px"><button type="button" class="sec" onclick="iniciarFirma()">Borrar firma</button></div>
-  <label class="chk"><input type="checkbox" id="p_acta" checked> Descargar acta de préstamo (PDF)</label>
+  <label class="chk"><input type="checkbox" id="p_acta" checked> Mostrar acta de préstamo (PDF)</label>
   <div class="acts">
     <button type="button" class="sec" onclick="dPNew.close()">Cancelar</button>
     <button type="submit">Registrar préstamo</button>
@@ -1486,6 +1500,49 @@ async function guardarDevolucion(ev){
   if(dPres.open)pintarPres();else if(ids.length===1)ver(ids[0]);
 }
 
+/* ---------- Visor de documentos ---------- */
+let vsArch=null,vsURL=null;
+function cargarPdfjs(){
+  if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  return new Promise((ok,err)=>{const sc=document.createElement("script");
+    sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    sc.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";ok(pdfjsLib);};
+    sc.onerror=err;document.head.appendChild(sc);});
+}
+async function verPDF(doc,nombre,titulo){
+  const buf=doc.output("arraybuffer");
+  vsArch={blob:new Blob([buf],{type:"application/pdf"}),nombre};
+  vsTit.textContent=titulo||nombre;vsCuerpo.className="pdf";
+  vsCuerpo.innerHTML='<p style="color:#fff;text-align:center;margin:30px 0">Cargando vista previa…</p>';
+  if(!dVisor.open)dVisor.showModal();
+  try{
+    const lib=await cargarPdfjs(),pdf=await lib.getDocument({data:new Uint8Array(buf)}).promise;
+    const dpr=window.devicePixelRatio||1,ancho=Math.max(280,vsCuerpo.clientWidth-16);
+    vsCuerpo.innerHTML="";
+    for(let i=1;i<=pdf.numPages;i++){
+      const pg=await pdf.getPage(i),v0=pg.getViewport({scale:1}),esc1=ancho/v0.width,vp=pg.getViewport({scale:esc1*dpr});
+      const c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;c.style.width=(vp.width/dpr)+"px";
+      vsCuerpo.appendChild(c);await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+    }
+  }catch(err){   // sin pdf.js (p. ej. sin conexión): visor del navegador
+    vsURL=URL.createObjectURL(vsArch.blob);
+    vsCuerpo.innerHTML=`<iframe src="${vsURL}" style="width:100%;height:66vh;border:0;background:#fff"></iframe>`;
+  }
+}
+function verExcel(wb,nombre,titulo){
+  vsArch={blob:new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),nombre};
+  vsTit.textContent=titulo||nombre;vsCuerpo.className="xls";
+  vsCuerpo.innerHTML=XLSX.utils.sheet_to_html(wb.Sheets[wb.SheetNames[0]],{header:"",footer:""});
+  if(!dVisor.open)dVisor.showModal();
+}
+function vsBajar(){
+  if(!vsArch)return;
+  const url=URL.createObjectURL(vsArch.blob),a=document.createElement("a");
+  a.href=url;a.download=vsArch.nombre;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+function vsCerrar(){if(dVisor.open)return;vsCuerpo.innerHTML="";if(vsURL){URL.revokeObjectURL(vsURL);vsURL=null;}}
+
 /* Acta de préstamo PDF (incluye la devolución si ya se registró) */
 function actaPDF(gid){
   const items=todosPrest().filter(x=>x.p.gid===gid).sort((a,b)=>(a.e.cat+a.e.serie).localeCompare(b.e.cat+b.e.serie,"es",{numeric:true}));
@@ -1515,7 +1572,7 @@ function actaPDF(gid){
   doc.setFont(undefined,"normal");
   doc.text(p.entrega||"",14+cw/2,y+10,{align:"center"});doc.text(p.quien||"",x2+cw/2,y+10,{align:"center"});
   numerarPaginas(doc);
-  doc.save(`Acta_prestamo_${num}.pdf`);
+  verPDF(doc,`Acta_prestamo_${num}.pdf`,"Acta de préstamo N° "+num);
 }
 
 function excelPrestamos(){
@@ -1528,7 +1585,7 @@ function excelPrestamos(){
     "Obs. salida":p.obs||"","Obs. devolución":p.dev?p.dev.obs:""}));
   const ws=XLSX.utils.json_to_sheet(filas);ws["!cols"]=Object.keys(filas[0]).map(()=>({wch:16}));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Préstamos");
-  XLSX.writeFile(wb,`Prestamos_Equipos_${hoy()}.xlsx`);
+  verExcel(wb,`Prestamos_Equipos_${hoy()}.xlsx`,`Préstamos de equipos (${l.length} registros)`);
 }
 
 /* ---------- Pantalla de inicio de sesión ---------- */
