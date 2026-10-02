@@ -276,12 +276,7 @@
 <!-- Etiquetas de equipo certificado (medidores de espesor) -->
 <dialog id="dCal"><div class="dlg">
   <h2>Etiquetas "Equipo certificado"</h2>
-  <div class="hint" style="font-size:.85rem">Solo medidores de espesor en estado Operativo · Tamaño 40 × 50 mm</div>
-  <label>Incluir</label>
-  <select id="cFiltro" onchange="cuentaCal()">
-    <option value="todos">Todos los medidores operativos</option>
-    <option value="vig">Operativos con calibración vigente</option>
-  </select>
+  <div class="hint" style="font-size:.85rem">Solo medidores de espesor operativos con certificado vigente y conforme · Tamaño 40 × 50 mm</div>
   <div class="hint" id="cCuenta"></div>
   <div class="acts">
     <button class="sec" onclick="dCal.close()">Cancelar</button>
@@ -690,7 +685,7 @@ function ver(id){
     ["Ubicación / responsable",e.ubic],["Última calibración",fmt(e.fcal)],["Próxima calibración",e.fprox?fmt(e.fprox)+(vencido(e)?" ⚠️ VENCIDA":""):""],
     ["Responsable calibración",e.rcal],["Certificado",certFicha(e)],["Cert. de fábrica",[e.fabnum,fmt(e.fabfecha),e.fabArch?"📎 adjunto":""].filter(Boolean).join(" · ")],["Equipo asociado",e.asoc],["Transductor asociado",transAsoc(e)],["Observaciones",e.obs]];
   dTabla.innerHTML=filas.filter(f=>f[1]).map(f=>`<tr><td>${f[0]}</td><td>${esc(f[1]).replace(/\n/g,"<br>")}</td></tr>`).join("");
-  btnCal.style.display=esMedidor(e)&&e.est==="Operativo"?"":"none";
+  btnCal.style.display=certVigente(e)?"":"none";
   btnFab.style.display=e.fabArch?"":"none";
   btnCertCal.style.display=esMedidor(e)&&e.est!=="Dado de baja"?"":"none";
   pintarPrestDet(e);
@@ -958,16 +953,21 @@ function etqTransductor(doc,e,x,y,A,Lg){
 const esMedidor=e=>/espesor/i.test(e.cat||"");
 function abrirEtqCal(){dMenu.open&&dMenu.close();cuentaCal();dCal.showModal();}
 function listaCal(){
-  return equipos.filter(e=>esMedidor(e)&&e.est==="Operativo"&&(cFiltro.value==="todos"||(e.fcal&&!vencido(e))));
+  return equipos.filter(certVigente);
 }
-function cuentaCal(){cCuenta.textContent=listaCal().length+" etiquetas"}
+// Etiqueta "Equipo certificado": solo medidores operativos con certificado vigente y conforme
+const certVigente=e=>!!e&&esMedidor(e)&&e.est==="Operativo"&&estadoCert(e)?.cls==="cert";
+function cuentaCal(){
+  const n=listaCal().length,sin=equipos.filter(e=>esMedidor(e)&&e.est==="Operativo"&&!certVigente(e));
+  cCuenta.innerHTML=`<b>${n}</b> etiqueta${n===1?"":"s"}`+(sin.length?`<br>Se omiten ${sin.length} sin certificado vigente: S/N ${sin.map(e=>esc(e.serie)).join(", ")}`:"");
+}
 function generarCal(){
-  const l=listaCal(); if(!l.length)return alert("No hay medidores de espesor operativos para esos filtros.");
+  const l=listaCal(); if(!l.length)return alert("No hay medidores de espesor operativos con certificado vigente.");
   etiquetasCalPDF(l);dCal.close();
 }
 function etiquetasCalPDF(lista){
-  const l=lista.filter(e=>e&&esMedidor(e)&&e.est==="Operativo").sort((a,b)=>a.serie.localeCompare(b.serie,"es",{numeric:true}));
-  if(!l.length)return alert("La etiqueta de equipo certificado es solo para medidores de espesor en estado Operativo.");
+  const l=lista.filter(certVigente).sort((a,b)=>a.serie.localeCompare(b.serie,"es",{numeric:true}));
+  if(!l.length)return alert("La etiqueta de equipo certificado es solo para medidores de espesor operativos con certificado vigente y conforme.");
   const {jsPDF}=window.jspdf,doc=new jsPDF();
   const LW=40,LH=50,gap=3,m=10;
   const W=doc.internal.pageSize.getWidth(),H=doc.internal.pageSize.getHeight();
