@@ -1307,7 +1307,7 @@ function certCalPDF(id,num){
   y=sec("3. Resultados",y);
   const nL=Math.max(...c.puntos.map(p=>p.ls.length));
   const head=["Nominal (mm)",...Array.from({length:nL},(_,i)=>`Lectura ${i+1} (mm)`),"Promedio (mm)","Error (mm)","Resultado"];
-  doc.autoTable({startY:y,head:[head],body:c.puntos.map(p=>[p.nom,...Array.from({length:nL},(_,i)=>p.ls[i]!=null?p.ls[i].toFixed(2):"—"),p.prom.toFixed(2),(p.err>=0?"+":"")+p.err.toFixed(2),p.ok?"Conforme":"No conforme"]),
+  doc.autoTable({startY:y,head:[head],body:c.puntos.map(p=>[Number(p.nom).toFixed(1),...Array.from({length:nL},(_,i)=>p.ls[i]!=null?p.ls[i].toFixed(2):"—"),p.prom.toFixed(2),(p.err>=0?"+":"")+p.err.toFixed(2),p.ok?"Conforme":"No conforme"]),
     theme:"grid",styles:{fontSize:9,halign:"center",cellPadding:1.8},headStyles:{fillColor:AZ,halign:"center"},margin:{left:14,right:14},
     didParseCell:d=>{if(d.section==="body"&&d.column.index===head.length-1)d.cell.styles.textColor=d.cell.raw==="Conforme"?[18,129,59]:[180,35,24]}});
   y=doc.lastAutoTable.finalY+8;
